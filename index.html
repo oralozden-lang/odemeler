@@ -112,7 +112,7 @@ header.top .date{color:var(--muted);font-size:13px;font-weight:500;margin-top:2p
 
 /* bottom nav + fab */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px 12px calc(env(safe-area-inset-bottom) + 6px);z-index:20}
-nav.tabs .in{max-width:620px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+nav.tabs .in{max-width:620px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
 nav.tabs button{border:0;background:transparent;display:grid;justify-items:center;gap:2px;padding:6px 0;font-size:11.5px;font-weight:700;color:var(--muted);border-radius:12px}
 nav.tabs button svg{width:22px;height:22px}
 nav.tabs button[aria-current="page"]{color:var(--accent)}
@@ -156,6 +156,25 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
 .state h2{font-family:var(--font-display);color:var(--ink);margin:0 0 6px;font-size:20px}
 .skel{height:64px;border-radius:14px;background:linear-gradient(90deg,var(--surface) 0%,var(--surface-2) 50%,var(--surface) 100%);background-size:200% 100%;animation:sh 1.2s linear infinite;margin-top:10px;border:1px solid var(--line)}
 .banner{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px}
+.group-h{font-family:var(--font-display);font-size:15px;color:var(--muted);margin:22px 4px 8px;display:flex;justify-content:space-between;align-items:baseline}
+.group-h span{font-family:var(--font-body);font-size:12px;font-weight:700}
+.icards{display:grid;gap:10px}
+.icard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:12px 14px 6px}
+.icard header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}
+.icard h3{font-family:var(--font-display);font-size:17px;margin:0;text-wrap:balance}
+.icard .ed{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:5px 10px;font-size:12.5px;font-weight:700;color:var(--muted);flex:none}
+.icard dl{margin:0}
+.frow{display:grid;grid-template-columns:minmax(96px,40%) 1fr;gap:10px;align-items:center;border-top:1px solid var(--line);padding:7px 0}
+.frow:first-child{border-top:0}
+.frow dt{font-size:12.5px;color:var(--muted);font-weight:600}
+.frow dd{margin:0;min-width:0}
+.copy{width:100%;text-align:right;border:0;background:transparent;padding:4px 0;font-weight:600;font-size:14px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;border-radius:6px}
+.copy:active{background:var(--accent-soft)}
+.icard .inote{font-size:13px;color:var(--muted);white-space:pre-wrap;border-top:1px solid var(--line);padding:8px 0 6px;overflow-wrap:anywhere}
+.frow-ed{display:grid;grid-template-columns:1fr 1.3fr 40px;gap:6px;margin-bottom:6px}
+.frow-ed input{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px;font-size:15px;outline:0;min-width:0}
+.frow-ed input:focus{border-color:var(--accent);background:var(--surface)}
+.frow-ed button{border:1px solid var(--line);background:transparent;border-radius:10px;color:var(--late);font-size:20px;line-height:1}
 .banner.nag{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#FFF6E5;border-color:#F3D9A4;color:#7A4B07}
 .banner.nag b{flex:none;color:var(--accent);font-size:13.5px}
 @keyframes fade{from{opacity:0}}
@@ -199,6 +218,10 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
       Kalemler
     </button>
+    <button data-tab="bilgiler">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V8l8-4 8 4v12"/><path d="M9 20v-5h6v5M4 20h16M9 10h.01M15 10h.01"/></svg>
+      Bilgiler
+    </button>
   </div>
 </nav>
 
@@ -235,7 +258,7 @@ const ICON = {
 
 /* ---------- state ---------- */
 const S = {
-  items:[], months:{}, lastBackup:null, failed:null,
+  items:[], months:{}, infos:[], iq:"", lastBackup:null, failed:null,
   tab:"ajanda", cursor:null, monthFilter:"all", q:"", cat:"all"
 };
 
@@ -334,12 +357,13 @@ function load(){
     const d = JSON.parse(raw);
     S.items = Array.isArray(d.items) ? d.items : [];
     S.months = d.months && typeof d.months === "object" ? d.months : {};
+    S.infos = Array.isArray(d.infos) ? d.infos : [];
     S.lastBackup = d.lastBackup || null;
   } catch(e){ S.failed = "Kayıtlı veriler okunamadı. Yedekten geri yükleyebilirsiniz."; }
 }
 function persist(){
   try {
-    localStorage.setItem(KEY, JSON.stringify({version:1, items:S.items, months:S.months, lastBackup:S.lastBackup}));
+    localStorage.setItem(KEY, JSON.stringify({version:1, items:S.items, months:S.months, infos:S.infos, lastBackup:S.lastBackup}));
     return true;
   } catch(e){
     toast("Kaydedilemedi: telefonda yer kalmamış olabilir. Hemen yedek alın.");
@@ -509,6 +533,80 @@ function viewKalemler(){
   return h;
 }
 
+/* ---------- bilgiler ---------- */
+const GROUPS = {genel:"Genel", sube:"Şubeler"};
+function viewBilgiler(){
+  const q = S.iq.trim().toLocaleLowerCase("tr");
+  const match = c => !q || [c.title, c.note, ...(c.fields||[]).flatMap(f => [f.l, f.v])].join(" ").toLocaleLowerCase("tr").includes(q);
+  let h = `<label class="search" for="iq">${ICON.search}<input id="iq" type="search" placeholder="Şube, sicil no, adres ara" value="${esc(S.iq)}" autocomplete="off"></label>`;
+  if(!S.infos.length){
+    return h + `<div class="state"><h2>Henüz bilgi yok</h2>Hazırladığım bilgi dosyasını ⋯ menüsünden "Yedekten geri yükle" ile ekleyin ya da + ile kart oluşturun.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="backup">Bilgi dosyasını yükle</button></div></div>`;
+  }
+  let any = false;
+  for(const [g, label] of Object.entries(GROUPS)){
+    const list = S.infos.filter(c => (c.group||"sube") === g && match(c)).sort((a,b) => (a.order??999)-(b.order??999) || a.title.localeCompare(b.title,"tr"));
+    if(!list.length) continue;
+    any = true;
+    h += `<h2 class="group-h">${label}<span>${list.length}</span></h2><div class="icards">` + list.map(c => `
+      <article class="icard">
+        <header><h3>${esc(c.title)}</h3><button class="ed" type="button" data-act="info-edit" data-id="${esc(c.id)}">Düzenle</button></header>
+        <dl>${(c.fields||[]).filter(f => f.v).map(f => `<div class="frow"><dt>${esc(f.l)}</dt><dd><button class="copy" type="button" data-act="copy" data-v="${esc(f.v)}" aria-label="${esc(f.l)} kopyala">${esc(f.v)}</button></dd></div>`).join("")}</dl>
+        ${c.note ? `<div class="inote">${esc(c.note)}</div>` : ""}
+      </article>`).join("") + `</div>`;
+  }
+  if(!any) h += `<div class="state"><h2>Sonuç yok</h2>Farklı bir kelimeyle arayın.</div>`;
+  return h;
+}
+async function copyValue(v){
+  try { await navigator.clipboard.writeText(v); toast(`Kopyalandı: ${v.length > 40 ? v.slice(0,40)+"…" : v}`); }
+  catch(e){ toast("Kopyalanamadı. Uzun basıp seçerek kopyalayın."); }
+}
+function openInfoEditor(id){
+  const c = id ? S.infos.find(x => x.id === id) : null;
+  if(id && !c) return;
+  const rows = (c && c.fields && c.fields.length) ? c.fields.map(f => ({...f})) : [{l:"",v:""},{l:"",v:""}];
+  const rowHTML = (f, i) => `<div class="frow-ed" data-i="${i}"><input aria-label="Alan adı" placeholder="Örn. SGK sicil no" value="${esc(f.l)}"><input aria-label="Değer" placeholder="Değer" value="${esc(f.v)}"><button type="button" aria-label="Alanı sil">×</button></div>`;
+  const html = `
+    <h3>${c ? "Kartı düzenle" : "Yeni bilgi kartı"}</h3>
+    <p class="lead">Değere dokununca kopyalanır. Şifreleri buraya yazmayın; telefonun şifre yöneticisinde saklayın.</p>
+    <form id="if" novalidate>
+      <div class="two">
+        <div class="field"><label for="iTitle">Başlık</label><input id="iTitle" value="${esc(c?c.title:"")}" placeholder="Örn. Serik" ${c?"":"autofocus"}></div>
+        <div class="field"><label for="iGroup">Bölüm</label><select id="iGroup">${Object.entries(GROUPS).map(([k,l]) => `<option value="${k}" ${(c?c.group:"sube")===k?"selected":""}>${l}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>Alanlar</label><div id="rows">${rows.map(rowHTML).join("")}</div>
+        <button class="btn ghost" type="button" id="addRow" style="padding:10px">+ Alan ekle</button></div>
+      <div class="field"><label for="iNote">Not</label><textarea id="iNote">${esc(c?c.note||"":"")}</textarea></div>
+      <p class="err" id="iErr"></p>
+      <div class="btns">
+        <button class="btn primary" type="submit">${c ? "Kaydet" : "Kartı ekle"}</button>
+        ${c ? `<button class="btn danger" type="button" id="iDel">Bu kartı sil</button>` : ""}
+        <button class="btn ghost" type="button" id="iCancel">Vazgeç</button>
+      </div>
+    </form>`;
+  openSheet(html, sh => {
+    const box = sh.querySelector("#rows");
+    box.onclick = e => { const b = e.target.closest(".frow-ed button"); if(b) b.parentElement.remove(); };
+    sh.querySelector("#addRow").onclick = () => { box.insertAdjacentHTML("beforeend", rowHTML({l:"",v:""}, box.children.length)); box.lastElementChild.querySelector("input").focus(); };
+    sh.querySelector("#iCancel").onclick = closeSheet;
+    const del = sh.querySelector("#iDel");
+    if(del) del.onclick = () => {
+      if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
+      S.infos = S.infos.filter(x => x.id !== id); persist(); closeSheet(); render(); toast(`${c.title} silindi`);
+    };
+    sh.querySelector("#if").onsubmit = ev => {
+      ev.preventDefault();
+      const title = sh.querySelector("#iTitle").value.trim();
+      if(!title){ sh.querySelector("#iErr").textContent = "Karta bir başlık verin."; return; }
+      const fields = [...box.querySelectorAll(".frow-ed")].map(r => { const [a,b] = r.querySelectorAll("input"); return {l:a.value.trim(), v:b.value.trim()}; }).filter(f => f.l || f.v);
+      const card = {id: c ? c.id : newId(), title, group: sh.querySelector("#iGroup").value, fields, note: sh.querySelector("#iNote").value.trim(), order: c ? c.order : 999};
+      S.infos = [...S.infos.filter(x => x.id !== card.id), card];
+      if(!persist()) { sh.querySelector("#iErr").textContent = dbErr(); return; }
+      closeSheet(); render(); toast(c ? "Kaydedildi" : `${title} eklendi`);
+    };
+  });
+}
+
 function backupNag(){
   if(S.tab !== "ajanda") return "";
   const days = S.lastBackup ? daysBetween(S.lastBackup.slice(0,10), iso(todayDate())) : null;
@@ -520,19 +618,19 @@ function backupNag(){
 /* ---------- render ---------- */
 function render(){
   const v = $("#view");
-  const titles = {ajanda:"Yaklaşan ödemeler", ay:"Aylık görünüm", kalemler:"Ödeme kalemleri"};
+  const titles = {ajanda:"Yaklaşan ödemeler", ay:"Aylık görünüm", kalemler:"Ödeme kalemleri", bilgiler:"Şube bilgileri"};
   $("#title").textContent = titles[S.tab];
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab===S.tab ? "page" : "false"));
   if(S.failed){ v.innerHTML = `<div class="state"><h2>Veriler açılamadı</h2>${esc(S.failed)}<div class="btns" style="margin-top:16px"><button class="btn primary" type="button" data-act="backup">Yedekten geri yükle</button></div></div>`; return; }
-  if(!S.items.length){
+  if(!S.items.length && S.tab !== "bilgiler"){
     v.innerHTML = `<div class="state"><h2>Hoş geldiniz</h2>Eski uygulamadan aldığınız yedeği yükleyin ya da + düğmesiyle ilk ödemenizi ekleyin.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="backup">Yedekten yükle</button></div></div>`;
     return;
   }
-  const focusQ = document.activeElement && document.activeElement.id === "q";
+  const focusQ = document.activeElement && (document.activeElement.id === "q" || document.activeElement.id === "iq") ? document.activeElement.id : null;
   const caret = focusQ ? document.activeElement.selectionStart : null;
   v.innerHTML = backupNag() +
-    (S.tab==="ajanda" ? viewAjanda() : S.tab==="ay" ? viewAy() : viewKalemler());
-  if(focusQ){ const q = $("#q"); q.focus(); try{ q.setSelectionRange(caret, caret); }catch(e){} }
+    (S.tab==="ajanda" ? viewAjanda() : S.tab==="ay" ? viewAy() : S.tab==="bilgiler" ? viewBilgiler() : viewKalemler());
+  if(focusQ){ const q = document.getElementById(focusQ); if(q){ q.focus(); try{ q.setSelectionRange(caret, caret); }catch(e){} } }
 }
 
 /* ---------- interactions ---------- */
@@ -567,10 +665,15 @@ document.addEventListener("click", e => {
   else if(act === "prev"){ S.cursor = addMonths(S.cursor||curPeriod(), -1); render(); }
   else if(act === "next"){ S.cursor = addMonths(S.cursor||curPeriod(), 1); render(); }
   else if(act === "backup") openMenu();
+  else if(act === "copy") copyValue(el.dataset.v);
+  else if(act === "info-edit") openInfoEditor(el.dataset.id);
   else if(act === "jump-late"){ const s = document.querySelector(".sec-late"); if(s) s.scrollIntoView({behavior:"smooth", block:"start"}); }
 });
-document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; render(); } });
-$("#fab").onclick = () => openEditor(null);
+document.addEventListener("input", e => {
+  if(e.target.id === "q"){ S.q = e.target.value; render(); }
+  if(e.target.id === "iq"){ S.iq = e.target.value; render(); }
+});
+$("#fab").onclick = () => S.tab === "bilgiler" ? openInfoEditor(null) : openEditor(null);
 $("#menuBtn").onclick = openMenu;
 
 function setTab(tab){
@@ -578,7 +681,7 @@ function setTab(tab){
   if(location.hash !== "#"+tab) history.replaceState(null, "", "#"+tab);
   render(); window.scrollTo(0,0);
 }
-window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if(["ajanda","ay","kalemler"].includes(h) && h!==S.tab){ S.tab=h; render(); } });
+window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if(["ajanda","ay","kalemler","bilgiler"].includes(h) && h!==S.tab){ S.tab=h; render(); } });
 
 /* ---------- sheets ---------- */
 function openSheet(html, onMount){
@@ -731,7 +834,7 @@ function openEditor(id){
 }
 
 function backupData(){
-  return {app:"odeme-takvimi", version:1, exported:new Date().toISOString(), items:S.items, months:S.months};
+  return {app:"odeme-takvimi", version:1, exported:new Date().toISOString(), items:S.items, months:S.months, infos:S.infos};
 }
 function markBackedUp(){ S.lastBackup = new Date().toISOString(); persist(); render(); }
 function backupFile(){
@@ -744,7 +847,7 @@ function openMenu(){
   const canShare = !!(navigator.canShare && navigator.canShare({files:[backupFile()]}));
   const html = `
     <h3>Yedek</h3>
-    <p class="lead">Ödemeleriniz yalnızca bu telefonda saklanıyor. Telefon değişirse ya da uygulama silinirse yedek dosyasıyla geri getirirsiniz. Son yedek: <b>${esc(last)}</b>.</p>
+    <p class="lead">Ödemeleriniz ve şube bilgileriniz yalnızca bu telefonda saklanıyor. Telefon değişirse ya da uygulama silinirse yedek dosyasıyla geri getirirsiniz. Son yedek: <b>${esc(last)}</b>.</p>
     <div class="btns">
       ${canShare ? `<button class="btn primary" type="button" id="share">Yedeği OneDrive'a / Drive'a gönder</button>` : ""}
       <button class="btn ${canShare?"":"primary"}" type="button" id="dl">Yedek dosyasını indir</button>
@@ -783,6 +886,18 @@ function openMenu(){
       msg.style.color = "";
       let data;
       try { data = JSON.parse(sh.querySelector("#impTxt").value); } catch(e){ msg.textContent = "Bu metin geçerli bir yedek değil. Dosyayı seçin ya da metnin tamamını yapıştırın."; return; }
+      if(data && !Array.isArray(data.items) && Array.isArray(data.infos)){
+        const infos = data.infos.filter(c => c && c.id && c.title);
+        if(S.infos.length && imp.dataset.confirm !== "1"){
+          imp.dataset.confirm = "1";
+          imp.textContent = `Mevcut ${S.infos.length} bilgi kartının yerine ${infos.length} kart yüklensin mi? Ödemeleriniz değişmez. Onaylamak için tekrar dokunun`;
+          return;
+        }
+        const prevI = S.infos; S.infos = infos;
+        if(!persist()){ S.infos = prevI; msg.textContent = dbErr(); return; }
+        closeSheet(); setTab("bilgiler"); toast(`${infos.length} bilgi kartı yüklendi`);
+        return;
+      }
       if(!data || !Array.isArray(data.items)){ msg.textContent = "Yedekte ödeme kalemi bulunamadı."; return; }
       const items = data.items.filter(i => i && i.id && i.name);
       if(S.items.length && imp.dataset.confirm !== "1"){
@@ -793,8 +908,10 @@ function openMenu(){
       const months = {};
       for(const [p, v] of Object.entries(data.months || {})) if(/^\d{4}-\d{2}$/.test(p)) months[p] = {paid: (v && v.paid) || {}};
       const prev = {items:S.items, months:S.months};
+      const prevInfos = S.infos;
       S.items = items; S.months = months; S.failed = null;
-      if(!persist()){ S.items = prev.items; S.months = prev.months; msg.textContent = dbErr(); return; }
+      if(Array.isArray(data.infos)) S.infos = data.infos.filter(c => c && c.id && c.title);
+      if(!persist()){ S.items = prev.items; S.months = prev.months; S.infos = prevInfos; msg.textContent = dbErr(); return; }
       closeSheet(); render(); toast(`${items.length} kalem yedekten yüklendi`);
     };
   });
@@ -804,7 +921,7 @@ function openMenu(){
 function boot(){
   $("#today").textContent = fmtHead.format(todayDate());
   const h = location.hash.slice(1);
-  if(["ajanda","ay","kalemler"].includes(h)) S.tab = h;
+  if(["ajanda","ay","kalemler","bilgiler"].includes(h)) S.tab = h;
   load();
   render();
   try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
