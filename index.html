@@ -301,7 +301,7 @@ const ICON = {
 
 /* ---------- state ---------- */
 const S = {
-  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], iq:"", lastBackup:null, failed:null,
+  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], iq:"", lastBackup:null, failed:null, badRaw:null,
   tab:"ajanda", cursor:null, monthFilter:"all", q:"", catSel:loadCatSel(), filterOpen:false
 };
 
@@ -311,7 +311,11 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const pad = n => String(n).padStart(2,"0");
 const ym = (y,m) => `${y}-${pad(m)}`;
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-const parseISO = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const parseISO = s => { const [y,m,d] = String(s ?? "").split("-").map(Number); return new Date(y, m-1, d); };
+const isDate = s => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && iso(parseISO(s)) === s;
+const isPeriod = s => typeof s === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+// Formats a YYYY-MM-DD string; a damaged date shows as-is instead of breaking the whole screen.
+const fd = (f, s) => isDate(s) ? f.format(parseISO(s)) : String(s ?? "—");
 function todayDate(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
 function addMonths(period, k){ let [y,m] = period.split("-").map(Number); m += k; while(m>12){m-=12;y++} while(m<1){m+=12;y--} return ym(y,m); }
 const curPeriod = () => { const t = todayDate(); return ym(t.getFullYear(), t.getMonth()+1); };
@@ -327,7 +331,9 @@ const fmtHead = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",week
 function parseAmount(s){
   s = String(s ?? "").replace(/[\s₺TLtl]/g,"");
   if(!s) return null;
-  if(s.includes(",")) s = s.replace(/\./g,"").replace(",",".");
+  if(s.includes("-")) return NaN;  // amounts are never negative
+  if(s.includes(",") && s.includes(".") && s.lastIndexOf(".") > s.lastIndexOf(",")) s = s.replace(/,/g,"");  // 1,234.56
+  else if(s.includes(",")) s = s.replace(/\./g,"").replace(",",".");
   else if((s.match(/\./g)||[]).length > 1) s = s.replace(/\./g,"");
   else if(/^\d+\.\d{3}$/.test(s)) s = s.replace(".","");
   const n = Number(s);
@@ -337,6 +343,7 @@ const amountInput = n => n==null ? "" : String(n).replace(".",",");
 
 function relLabel(dateISO){
   const d = daysBetween(iso(todayDate()), dateISO);
+  if(Number.isNaN(d)) return "Tarih okunamadı";
   if(d === 0) return "Bugün";
   if(d === 1) return "Yarın";
   if(d === -1) return "Dün gecikti";
@@ -344,7 +351,7 @@ function relLabel(dateISO){
   return `${d} gün sonra`;
 }
 function freqLabel(it){
-  if(it.once) return "Tek sefer · " + fmtLong.format(parseISO(it.once));
+  if(it.once) return "Tek sefer · " + fd(fmtLong, it.once);
   const ms = (it.months && it.months.length) ? it.months : ALL;
   const d = `ayın ${it.day}'${daySuffix(it.day)}`;
   if(ms.length === 12) return "Her " + d;
@@ -362,6 +369,8 @@ function daySuffix(n){
 const NO_CAT = {id:"", label:"Kategorisiz", h:210, kind:"variable"};
 const catOf = it => S.cats.find(c => c.id === it.cat) || NO_CAT;
 const kindOf = it => it.once ? "fixed" : (it.kind || catOf(it).kind || "variable");
+// A new price holds from `from` onwards: entries from that month or later are replaced, earlier ones stay.
+const setPriceFrom = (prices, from, amount) => prices.filter(p => p.from < from).concat({from, amount});
 function priceAt(it, period){
   const ps = Array.isArray(it.prices) ? [...it.prices].sort((a,b) => a.from.localeCompare(b.from)) : [];
   if(!ps.length) return it.amount ?? null;
@@ -387,9 +396,10 @@ function lastKnown(it, period){
 // What this item costs in a given month, and whether that figure is only an estimate.
 function amountFor(it, period, paid){
   if(paid && paid.amount != null) return {v: paid.amount, est: false};
-  if(kindOf(it) === "fixed") return {v: priceAt(it, period), est: false};
+  // A figure typed in for this month wins; a fixed item only has one if it used to be variable.
   const e = enteredAmount(it, period);
   if(e != null) return {v: e, est: false};
+  if(kindOf(it) === "fixed") return {v: priceAt(it, period), est: false};
   const v = lastKnown(it, period);
   return {v, est: v != null};
 }
@@ -416,7 +426,7 @@ function filterBarHTML(){
     </button>
     ${n ? `<button class="fclear" type="button" data-act="filter-clear" aria-label="Filtreyi temizle">×</button>` : ""}
     ${S.filterOpen ? `<div class="fpanel" id="fpanel" role="group" aria-label="Kategoriler">
-      ${opts.map(o => `<label class="fopt"><input type="checkbox" data-fcat="${esc(o.id)}" ${S.catSel.includes(o.id)?"checked":""}><span class="dot" style="--h:${o.h}"></span><span class="grow">${esc(o.label)}</span><span class="cnt">${counts[o.id]||0}</span></label>`).join("")}
+      ${opts.map(o => `<label class="fopt"><input type="checkbox" data-fcat="${esc(o.id)}" ${S.catSel.includes(o.id)?"checked":""}><span class="dot" style="--h:${Number(o.h)||0}"></span><span class="grow">${esc(o.label)}</span><span class="cnt">${counts[o.id]||0}</span></label>`).join("")}
       <div class="factions">
         <button type="button" data-act="filter-clear">Tümünü göster</button>
         <button type="button" data-act="cats">Kategorileri düzenle</button>
@@ -457,6 +467,9 @@ function occRange(fromP, toP){
 }
 const sum = arr => arr.reduce((s,o) => s + (o.amt || 0), 0);
 const estCount = arr => arr.filter(o => o.est).length;
+// A total is only approximate when it holds an estimate or leaves out an item with no amount.
+const approx = arr => arr.some(o => o.est || o.amt == null);
+const tilde = arr => approx(arr) ? "~" : "";
 
 /* ---------- renewals ---------- */
 // The renewal this item is due for now (its renewal month, or the month before), unless already handled.
@@ -477,17 +490,61 @@ function renewalDue(it){
 const KEY = "odemeler.v1";
 const SCHEMA = 2;
 // Brings data saved by older versions (or an old backup) up to the current shape.
+// Every field is checked here, so a damaged or hand-edited backup cannot break the screen or inject markup.
+const numOrNull = v => (v == null || v === "" || !Number.isFinite(Number(v))) ? null : Number(v);
+const isObj = v => v && typeof v === "object" && !Array.isArray(v);
+function cleanItem(raw){
+  const it = {...raw};
+  it.id = String(it.id ?? "") || newId();
+  it.name = String(it.name ?? "").trim() || "Adsız kalem";
+  it.cat = String(it.cat ?? "");
+  it.note = String(it.note ?? "");
+  it.once = it.once ? String(it.once) : null;
+  const day = Math.round(Number(it.day));
+  it.day = Number.isFinite(day) ? Math.min(31, Math.max(1, day)) : (it.once && isDate(it.once) ? Number(it.once.slice(8)) : 1);
+  it.months = Array.isArray(it.months) ? [...new Set(it.months.map(Number).filter(m => Number.isInteger(m) && m >= 1 && m <= 12))].sort((a,b) => a-b) : [];
+  if(!isPeriod(it.start)) delete it.start;
+  if(!isPeriod(it.end)) delete it.end;
+  const rm = Number(it.renewMonth);
+  if(Number.isInteger(rm) && rm >= 1 && rm <= 12) it.renewMonth = rm; else delete it.renewMonth;
+  if(it.kind !== "fixed" && it.kind !== "variable") delete it.kind;
+  it.amount = numOrNull(it.amount);
+  if(it.prices != null) it.prices = Array.isArray(it.prices) ? it.prices.filter(p => isObj(p) && isPeriod(p.from)).map(p => ({from: p.from, amount: numOrNull(p.amount)})) : [];
+  if(it.renewDone != null) it.renewDone = Array.isArray(it.renewDone) ? it.renewDone.filter(isPeriod) : [];
+  return it;
+}
+function cleanCats(list){
+  const seen = new Set();
+  const cats = (Array.isArray(list) ? list : []).filter(isObj).map(c => {
+    const h = Number(c.h);
+    return {...c, id: String(c.id ?? ""), label: String(c.label ?? "").trim() || "Kategori", h: Number.isFinite(h) ? h : 210, kind: c.kind === "fixed" ? "fixed" : "variable"};
+  }).filter(c => c.id && !seen.has(c.id) && seen.add(c.id));
+  return cats.length ? cats : DEFAULT_CATS.map(c => ({...c}));
+}
+function cleanMonth(v){
+  const paid = {}, amounts = {};
+  if(isObj(v) && isObj(v.paid)) for(const [id, p] of Object.entries(v.paid)) if(isObj(p)) paid[id] = {...p, at: String(p.at ?? ""), amount: numOrNull(p.amount)};
+  if(isObj(v) && isObj(v.amounts)) for(const [id, a] of Object.entries(v.amounts)){ const n = numOrNull(a); if(n != null) amounts[id] = n; }
+  return {paid, amounts};
+}
+const cleanInfos = list => (Array.isArray(list) ? list : []).filter(c => isObj(c) && c.id && c.title).map(c => ({
+  ...c, id: String(c.id), title: String(c.title), note: String(c.note ?? ""), group: c.group === "genel" ? "genel" : "sube",
+  fields: Array.isArray(c.fields) ? c.fields.filter(isObj).map(f => ({l: String(f.l ?? ""), v: String(f.v ?? "")})) : []
+}));
 function migrate(d){
-  const out = {items: Array.isArray(d.items) ? d.items.map(i => ({...i})) : [], months: {}, cats: Array.isArray(d.cats) && d.cats.length ? d.cats : DEFAULT_CATS.map(c => ({...c}))};
-  for(const [p, v] of Object.entries(d.months || {})){
-    if(/^\d{4}-\d{2}$/.test(p)) out.months[p] = {paid: (v && v.paid) || {}, amounts: (v && v.amounts) || {}};
+  if(!isObj(d)) throw new Error("not a backup");
+  const out = {items: (Array.isArray(d.items) ? d.items : []).filter(isObj).map(cleanItem), months: {}, cats: cleanCats(d.cats)};
+  for(const [p, v] of Object.entries(isObj(d.months) ? d.months : {})){
+    if(isPeriod(p)) out.months[p] = cleanMonth(v);
   }
   if((d.schema || 1) < 2){
     const monthIdx = s => ML.findIndex(n => n.toLocaleLowerCase("tr") === s.toLocaleLowerCase("tr")) + 1;
     for(const it of out.items){
-      const m = /([A-Za-zÇĞİÖŞÜçğıöşü]+)\s+yenileme/i.exec(it.note || "");
+      const m = /([A-Za-zÇĞİÖŞÜçğıöşü]+)\s+yenileme/i.exec(it.note);
       if(m && monthIdx(m[1]) > 0 && !it.renewMonth) it.renewMonth = monthIdx(m[1]);
-      if(/^i\d{3}$/.test(it.id)) it.note = "";
+      // The old app's starter items carried only "Mart yenileme"-style notes, now kept as the renewal month.
+      // Anything else written in a note is the user's own and stays.
+      if(/^i\d{3}$/.test(it.id) && /^\s*[A-Za-zÇĞİÖŞÜçğıöşü]+\s+yenileme(si)?\s*\.?\s*$/i.test(it.note) && it.renewMonth) it.note = "";
       if(/aidat/i.test(it.name) && (it.cat === "fatura" || !it.cat)) it.cat = "aidat";
     }
     for(const it of out.items){  // "(elden)" rents renew together with their pair
@@ -501,19 +558,36 @@ function migrate(d){
   }
   return out;
 }
+// Saved data that could not be read is never written over: it is kept aside, saving is blocked,
+// and "Yedek" hands out that original text so nothing is lost before a restore.
+const BAD_KEY = KEY + ".okunamayan";
 function load(){
+  let raw = null;
   try {
-    const raw = localStorage.getItem(KEY);
+    raw = localStorage.getItem(KEY);
     if(!raw) return;
     const d = JSON.parse(raw);
     const r = migrate(d);
     S.items = r.items; S.months = r.months; S.cats = r.cats;
-    S.infos = Array.isArray(d.infos) ? d.infos : [];
-    S.lastBackup = d.lastBackup || null;
-    if((d.schema || 1) < SCHEMA) persist();
-  } catch(e){ S.failed = "Kayıtlı veriler okunamadı. Yedekten geri yükleyebilirsiniz."; }
+    S.infos = cleanInfos(d.infos);
+    S.lastBackup = typeof d.lastBackup === "string" ? d.lastBackup : null;
+    if((d.schema || 1) < SCHEMA){
+      // keep the pre-upgrade copy once, in case the upgrade gets something wrong
+      try { if(!localStorage.getItem(KEY + ".eski-surum")) localStorage.setItem(KEY + ".eski-surum", raw); } catch(e){}
+      persist();
+    }
+  } catch(e){
+    S.items = []; S.months = {}; S.infos = []; S.cats = DEFAULT_CATS.map(c => ({...c}));
+    S.failed = "Kayıtlı veriler okunamadı. Hiçbir şey silinmedi: önce ⋯ menüsünden ham veriyi yedek olarak alın, sonra yedekten geri yükleyin.";
+    S.badRaw = raw;
+    try { if(raw && localStorage.getItem(BAD_KEY) !== raw) localStorage.setItem(BAD_KEY, raw); } catch(e2){}
+  }
 }
 function persist(){
+  if(S.failed){
+    toast("Kayıtlı veriler okunamadığı için kaydedilmedi. Önce yedekten geri yükleyin.");
+    return false;
+  }
   try {
     localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, lastBackup:S.lastBackup}));
     return true;
@@ -580,13 +654,13 @@ function rowHTML(o, opts = {}){
   const rel = relLabel(o.date);
   const d = daysBetween(t, o.date);
   const relCls = (!o.paid && d >= 0 && d <= 2) ? "rel soon" : "rel";
-  const showDate = opts.hideDate ? "" : `<span>${esc(fmtDay.format(parseISO(o.date)))}</span>`;
+  const showDate = opts.hideDate ? "" : `<span>${esc(fd(fmtDay, o.date))}</span>`;
   const relPart = o.paid ? `<span class="rel" style="color:var(--ok)">Ödendi</span>` : `<span class="${relCls}">${rel}</span>`;
   return `<div class="item${o.paid?" paid":""}${late?" late":""}" data-id="${esc(o.it.id)}" data-period="${o.period}">
     <button class="check" type="button" data-act="toggle" aria-label="${o.paid?"Ödenmedi olarak geri al":"Ödendi olarak işaretle"}: ${esc(o.it.name)}">${ICON.check}</button>
     <button class="main" type="button" data-act="open">
       <span class="name">${esc(o.it.name)}</span>
-      <span class="meta">${relPart}${showDate ? "<span>·</span>"+showDate : ""}<span class="tag" style="--h:${c.h}">${esc(c.label)}</span>${o.it.note ? ICON.note : ""}</span>
+      <span class="meta">${relPart}${showDate ? "<span>·</span>"+showDate : ""}<span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span>${o.it.note ? ICON.note : ""}</span>
     </button>
     <div class="amt num">${amtHTML(o.amt, o.est)}</div>
   </div>`;
@@ -595,9 +669,8 @@ function sectionHTML(title, list, opts = {}){
   if(!list.length && !opts.showEmpty) return "";
   const open = list.filter(o => !o.paid);
   const total = sum(open);
-  const est = estCount(open);
   return `<section class="section ${opts.cls||""}">
-    <div class="sec-head"><h2>${esc(title)} <span class="count">${open.length}${list.length!==open.length?"/"+list.length:""}</span></h2>${total ? `<span class="sum num">${est?"~":""}${tl(total)}</span>` : ""}</div>
+    <div class="sec-head"><h2>${esc(title)} <span class="count">${open.length}${list.length!==open.length?"/"+list.length:""}</span></h2>${total ? `<span class="sum num">${tilde(open)}${tl(total)}</span>` : ""}</div>
     <div class="list">${list.length ? list.map(o => rowHTML(o, opts)).join("") : `<div class="empty-line">${esc(opts.emptyText||"Ödeme yok.")}</div>`}</div>
   </section>`;
 }
@@ -614,11 +687,11 @@ function heroHTML(period){
   const [y,m] = period.split("-").map(Number);
   return `<div class="hero">
     <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan${S.catSel.length ? " · filtreli" : ""}</span><span class="sub num">%${pct} ödendi</span></div>
-    <div class="big num">${est ? "~" : ""}${tl(left)}</div>
+    <div class="big num">${tilde(occ.filter(o => !o.paid))}${tl(left)}</div>
     <div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <div class="split">
       <div><span class="sub">Ödenen · ${paid.length} kalem</span><b class="num">${tl(paidSum)}</b></div>
-      <div><span class="sub">Ay toplamı · ${occ.length} kalem</span><b class="num">${est ? "~" : ""}${tl(total)}</b></div>
+      <div><span class="sub">Ay toplamı · ${occ.length} kalem</span><b class="num">${tilde(occ)}${tl(total)}</b></div>
     </div>
     ${est ? `<button class="hero-note" type="button" data-act="amounts" data-period="${period}">${est} kalemin tutarı geçen aydan tahmini · <b>Tutarları gir</b></button>` : ""}
   </div>`;
@@ -634,7 +707,7 @@ function renewalsHTML(){
       return `<div class="item renew" data-id="${esc(it.id)}">
         <button class="main" type="button" data-act="renew" data-key="${key}">
           <span class="name">${esc(it.name)}</span>
-          <span class="meta"><span class="rel soon">${now ? "Bu ay yenileniyor" : "Gelecek ay yenileniyor"}</span><span>·</span><span>${ML[m-1]} ${y}</span><span class="tag" style="--h:${c.h}">${esc(c.label)}</span></span>
+          <span class="meta"><span class="rel soon">${now ? "Bu ay yenileniyor" : "Gelecek ay yenileniyor"}</span><span>·</span><span>${ML[m-1]} ${y}</span><span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span></span>
         </button>
         <div class="amt num">${tl(priceAt(it, key))}<small>Güncelle ›</small></div>
       </div>`;
@@ -644,7 +717,10 @@ function renewalsHTML(){
 function viewAjanda(){
   const t = iso(todayDate());
   const cp = curPeriod();
-  const every = occRange(addMonths(cp,-3), addMonths(cp,2));
+  // Late payments are looked for up to two years back. Items with no start month (from old backups) only
+  // count from three months back, otherwise their whole past would show up as late.
+  const lateFloor = addMonths(cp,-3);
+  const every = occRange(addMonths(cp,-24), addMonths(cp,2)).filter(o => o.it.once || o.it.start || o.period >= lateFloor);
   const all = filtered(every);
   const late = all.filter(o => !o.paid && o.date < t);
   const hiddenLate = every.filter(o => !o.paid && o.date < t && !inFilter(o.it));
@@ -653,7 +729,7 @@ function viewAjanda(){
   const soon = all.filter(o => { const d = daysBetween(t,o.date); return d>=8 && d<=30 && !o.paid; });
   let h = filterBarHTML() + heroHTML(cp);
   if(hiddenLate.length) h += `<button class="alert soft" type="button" data-act="filter-clear">${ICON.alert}<span class="grow">Filtre dışında ${hiddenLate.length} geciken ödeme var</span><b>Göster</b></button>`;
-  if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tl(sum(late))}</span></button>`;
+  if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tilde(late)}${tl(sum(late))}</span></button>`;
   h += sectionHTML("Gecikenler", late, {cls:"sec-late"});
   h += renewalsHTML();
   h += sectionHTML("Bugün", today, {showEmpty:true, hideDate:true, emptyText:"Bugün vadesi gelen ödeme yok."});
@@ -686,8 +762,7 @@ function viewAy(){
   const groups = new Map();
   for(const o of shown){ if(!groups.has(o.date)) groups.set(o.date, []); groups.get(o.date).push(o); }
   for(const [date, list] of groups){
-    const est = estCount(list);
-    h += `<section class="section"><div class="day-head${date===t?" today":""}"><span>${esc(fmtHead.format(parseISO(date)))}${date===t?" · Bugün":""}</span><span class="num">${est?"~":""}${tl(sum(list))}</span></div>
+    h += `<section class="section"><div class="day-head${date===t?" today":""}"><span>${esc(fd(fmtHead, date))}${date===t?" · Bugün":""}</span><span class="num">${tilde(list)}${tl(sum(list))}</span></div>
       <div class="list">${list.map(o => rowHTML(o,{hideDate:true})).join("")}</div></section>`;
   }
   return h;
@@ -706,7 +781,7 @@ function viewKalemler(){
   ${filterBarHTML()}
   <div class="stat-row">
     <div class="stat"><span>Sabit · değişken</span><b class="num">${fixedN} · ${varN} kalem</b></div>
-    <div class="stat"><span>${ML[Number(cp.slice(5))-1]} toplamı</span><b class="num">${estCount(occ)?"~":""}${tl(sum(occ))}</b></div>
+    <div class="stat"><span>${ML[Number(cp.slice(5))-1]} toplamı</span><b class="num">${tilde(occ)}${tl(sum(occ))}</b></div>
   </div>`;
   if(!list.length){ h += `<div class="state"><h2>Sonuç yok</h2>Aramayı veya kategoriyi değiştirin.</div>`; return h; }
   h += `<section class="section"><div class="list">` + list.map(i => {
@@ -716,7 +791,7 @@ function viewKalemler(){
     return `<div class="item" data-id="${esc(i.id)}">
       <button class="main" type="button" data-act="edit">
         <span class="name">${esc(i.name)}</span>
-        <span class="meta"><span>${esc(freqLabel(i))}</span>${extra}<span class="tag" style="--h:${c.h}">${esc(c.label)}</span>${i.note?ICON.note:""}</span>
+        <span class="meta"><span>${esc(freqLabel(i))}</span>${extra}<span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span>${i.note?ICON.note:""}</span>
       </button>
       <div class="amt num">${amtHTML(a.v, a.est)}</div>
     </div>`;
@@ -800,7 +875,8 @@ function openInfoEditor(id){
 
 function backupNag(){
   if(S.tab !== "ajanda") return "";
-  const days = S.lastBackup ? daysBetween(S.lastBackup.slice(0,10), iso(todayDate())) : null;
+  const lb = S.lastBackup ? new Date(S.lastBackup) : null;
+  const days = lb && !isNaN(lb) ? daysBetween(iso(lb), iso(todayDate())) : null;  // local day, not UTC
   if(days !== null && days < 7) return "";
   const msg = days === null ? "Henüz yedek almadınız. Veriler yalnızca bu telefonda duruyor." : `Son yedek ${days} gün önce alındı.`;
   return `<button class="banner nag" type="button" data-act="backup"><span>${esc(msg)}</span><b>Yedek al</b></button>`;
@@ -812,7 +888,7 @@ function render(){
   const titles = {ajanda:"Yaklaşan ödemeler", ay:"Aylık görünüm", kalemler:"Ödeme kalemleri", bilgiler:"Şube bilgileri"};
   $("#title").textContent = titles[S.tab];
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab===S.tab ? "page" : "false"));
-  if(S.failed){ v.innerHTML = `<div class="state"><h2>Veriler açılamadı</h2>${esc(S.failed)}<div class="btns" style="margin-top:16px"><button class="btn primary" type="button" data-act="backup">Yedekten geri yükle</button></div></div>`; return; }
+  if(S.failed){ v.innerHTML = `<div class="state"><h2>Veriler açılamadı</h2>${esc(S.failed)}<div class="btns" style="margin-top:16px"><button class="btn primary" type="button" data-act="backup">Ham veriyi yedekle / geri yükle</button></div></div>`; return; }
   if(!S.items.length && S.tab !== "bilgiler"){
     v.innerHTML = `<div class="state"><h2>Hoş geldiniz</h2>Eski uygulamadan aldığınız yedeği yükleyin ya da + düğmesiyle ilk ödemenizi ekleyin.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="backup">Yedekten yükle</button></div></div>`;
     return;
@@ -875,7 +951,7 @@ document.addEventListener("input", e => {
   if(e.target.id === "q"){ S.q = e.target.value; render(); }
   if(e.target.id === "iq"){ S.iq = e.target.value; render(); }
 });
-$("#fab").onclick = () => S.tab === "bilgiler" ? openInfoEditor(null) : openEditor(null);
+$("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten geri yükleyin.") : S.tab === "bilgiler" ? openInfoEditor(null) : openEditor(null);
 $("#menuBtn").onclick = openMenu;
 
 function setTab(tab){
@@ -886,8 +962,12 @@ function setTab(tab){
 window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if(["ajanda","ay","kalemler","bilgiler"].includes(h) && h!==S.tab){ S.tab=h; render(); } });
 
 /* ---------- sheets ---------- */
+// Each open sheet sits on its own history entry, so Android's back button closes the sheet instead of the app.
+let sheetEntry = false;
+function removeSheet(){ const o = $(".overlay"); if(o) o.remove(); document.body.style.overflow = ""; }
 function openSheet(html, onMount){
-  closeSheet();
+  removeSheet();
+  if(!sheetEntry){ history.pushState({sheet:1}, "", location.href); sheetEntry = true; }
   const ov = document.createElement("div");
   ov.className = "overlay";
   ov.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
@@ -897,7 +977,12 @@ function openSheet(html, onMount){
   onMount && onMount(ov.querySelector(".sheet"));
   const f = ov.querySelector("[autofocus]"); if(f) setTimeout(()=>f.focus(), 60);
 }
-function closeSheet(){ const o = $(".overlay"); if(o) o.remove(); document.body.style.overflow = ""; }
+function closeSheet(){ removeSheet(); if(sheetEntry){ sheetEntry = false; history.back(); } }
+window.addEventListener("popstate", () => {
+  if(sheetEntry){ sheetEntry = false; removeSheet(); }
+  // a tab picked while the sheet was open must survive stepping back over the sheet's entry
+  if(location.hash !== "#" + S.tab) history.replaceState(null, "", "#" + S.tab);
+});
 document.addEventListener("keydown", e => { if(e.key === "Escape") closeSheet(); });
 
 function openDetail(id, period, focusAmount){
@@ -906,15 +991,15 @@ function openDetail(id, period, focusAmount){
   const entered = enteredAmount(it, period);
   const html = `
     <h3>${esc(it.name)}</h3>
-    <p class="lead"><span class="tag" style="--h:${c.h}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))} · ${k === "fixed" ? "Sabit tutar" : "Her ay değişir"}</p>
+    <p class="lead"><span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))} · ${k === "fixed" ? "Sabit tutar" : "Her ay değişir"}</p>
     <dl class="kv">
-      <dt>Vade</dt><dd>${esc(fmtHead.format(parseISO(o.date)))}</dd>
+      <dt>Vade</dt><dd>${esc(fd(fmtHead, o.date))}</dd>
       <dt>Durum</dt><dd style="color:${o.paid?"var(--ok)":(o.date<iso(todayDate())?"var(--late)":"inherit")}">${o.paid ? "Ödendi" : esc(relLabel(o.date))}</dd>
       <dt>Bu ayın tutarı</dt><dd class="num">${o.amt == null ? "—" : (o.est ? "~" + tl(o.amt, true) + " (tahmini)" : tl(o.amt, true))}</dd>
     </dl>
     ${it.note ? `<div class="notebox">${esc(it.note)}</div>` : ""}
     ${o.paid ? `
-      <div class="paidbox">${ICON.check}<span>${esc(fmtLong.format(parseISO(o.paid.at)))} tarihinde ödendi${o.paid.amount!=null?" · "+tl(o.paid.amount,true):""}</span></div>
+      <div class="paidbox">${ICON.check}<span>${esc(fd(fmtLong, o.paid.at))} tarihinde ödendi${o.paid.amount!=null?" · "+tl(o.paid.amount,true):""}</span></div>
       <div class="btns">
         <button class="btn" type="button" id="unpay">Ödenmedi olarak geri al</button>
         <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
@@ -940,11 +1025,23 @@ function openDetail(id, period, focusAmount){
       return v;
     };
     const pay = sh.querySelector("#pay");
+    if(pay) sh.querySelector("#pAmt").addEventListener("input", () => {
+      if(pay.dataset.confirm){ delete pay.dataset.confirm; pay.textContent = "Ödendi olarak işaretle"; sh.querySelector("#pErr").textContent = ""; }
+    });
     if(pay) pay.onclick = () => {
       let v = readAmt(); if(v === undefined) return;
-      if(v == null) v = o.amt;  // left empty: use the shown figure
+      const typed = v != null;
+      if(!typed && o.est && pay.dataset.confirm !== "1"){
+        // the figure on screen is only a guess from an earlier month: don't record it as paid without a yes
+        pay.dataset.confirm = "1";
+        sh.querySelector("#pErr").textContent = `Tutar yazılmadı. Tahmini ~${tl(o.amt, true)} ödenmiş sayılacak. Doğruysa tekrar dokunun, değilse gerçek tutarı yazın.`;
+        pay.textContent = `~${tl(o.amt)} ile ödendi olarak işaretle`;
+        sh.querySelector("#pAmt").focus();
+        return;
+      }
+      if(!typed) v = o.amt;  // left empty: use the shown figure (a guess only after the confirmation above)
       const at = sh.querySelector("#pAt").value || iso(todayDate());
-      if(k === "variable" && v != null) setAmounts(period, {[id]: v});
+      if(k === "variable" && typed) setAmounts(period, {[id]: v});
       closeSheet();
       setPaid(period, id, {at, amount: v ?? null});
       toast(`${it.name} ödendi`, "Geri al", () => setPaid(period, id, null));
@@ -968,7 +1065,7 @@ function openAmounts(period){
     <div id="amtList">${list.map(o => {
       const e = enteredAmount(o.it, period);
       const est = lastKnown(o.it, period);
-      return `<div class="amt-row"><label for="a_${esc(o.it.id)}"><b>${esc(o.it.name)}</b><span>${esc(fmtDay.format(parseISO(o.date)))} · ${esc(catOf(o.it).label)}</span></label>
+      return `<div class="amt-row"><label for="a_${esc(o.it.id)}"><b>${esc(o.it.name)}</b><span>${esc(fd(fmtDay, o.date))} · ${esc(catOf(o.it).label)}</span></label>
         <input id="a_${esc(o.it.id)}" data-id="${esc(o.it.id)}" inputmode="decimal" placeholder="${est!=null?"~"+esc(amountInput(est)):"Tutar"}" value="${esc(amountInput(e))}"></div>`;
     }).join("")}</div>
     <p class="err" id="aErr"></p>
@@ -1020,7 +1117,7 @@ function openRenewal(id, key){
       const v = parseAmount(sh.querySelector("#rAmt").value);
       const from = sh.querySelector("#rFrom").value || key;
       if(v == null || Number.isNaN(v)){ sh.querySelector("#rErr").textContent = "Yeni tutarı rakamla yazın."; return; }
-      const prices = (it.prices || []).filter(p => p.from !== from).concat({from, amount: v});
+      const prices = setPriceFrom(it.prices || [], from, v);
       updateItem(id, {prices, amount: v, renewDone: [...(it.renewDone||[]), key]});
       closeSheet(); render(); toast(`${it.name}: ${tl(v, true)}, ${ML[Number(from.slice(5))-1]} ${from.slice(0,4)}'ten itibaren`);
     };
@@ -1058,11 +1155,11 @@ function openEditor(id){
       <div id="recur">
         <div class="field" id="mWrap"><label>Hangi aylarda?</label><div class="mchips" id="mchips">${MS.map((m,i)=>`<button type="button" data-m="${i+1}" aria-pressed="${months.includes(i+1)}">${m}</button>`).join("")}</div></div>
         <div class="two">
-          <div class="field"><label for="fDay">Ayın kaçında?</label><input id="fDay" type="number" inputmode="numeric" min="1" max="31" value="${it&&!it.once?it.day:""}" placeholder="1–31"></div>
+          <div class="field"><label for="fDay">Ayın kaçında?</label><input id="fDay" type="number" inputmode="numeric" min="1" max="31" value="${esc(it&&!it.once?it.day:"")}" placeholder="1–31"></div>
           <div class="field" id="renewWrap"><label for="fRenew">Yenileme ayı</label><select id="fRenew"><option value="">Yok</option>${ML.map((n,i)=>`<option value="${i+1}" ${it&&it.renewMonth===i+1?"selected":""}>${n}</option>`).join("")}</select></div>
         </div>
         <div class="two">
-          <div class="field"><label for="fStart">Başlangıç ayı</label><input id="fStart" type="month" value="${esc(it&&it.start?it.start:cp)}"></div>
+          <div class="field"><label for="fStart">Başlangıç ayı</label><input id="fStart" type="month" value="${esc(it ? (it.start || "") : cp)}"></div>
           <div class="field"><label for="fEnd">Son ay (isteğe bağlı)</label><input id="fEnd" type="month" value="${esc(it&&it.end?it.end:"")}"></div>
         </div>
       </div>
@@ -1071,6 +1168,7 @@ function openEditor(id){
       <p class="err" id="fErr"></p>
       <div class="btns">
         <button class="btn primary" type="submit" id="save">${it ? "Değişiklikleri kaydet" : "Ödemeyi ekle"}</button>
+        ${it && !it.once && !(it.end && it.end <= cp) ? `<button class="btn" type="button" id="finish">Bu aydan sonra bitir (geçmiş korunur)</button>` : ""}
         ${it ? `<button class="btn danger" type="button" id="del">Bu kalemi sil</button>` : ""}
         <button class="btn ghost" type="button" id="cancel">Vazgeç</button>
       </div>
@@ -1086,7 +1184,7 @@ function openEditor(id){
       sh.querySelector("#kindWrap").style.display = m === "once" ? "none" : "";
       sh.querySelector("#renewWrap").style.visibility = fixed && m !== "once" ? "visible" : "hidden";
       sh.querySelector("#fAmtL").textContent = fixed ? "Tutar (₺)" : "Tahmini tutar (₺)";
-      const changed = it && fixed && kindOf(it) === "fixed" && m !== "once" && parseAmount(amtIn.value) !== curAmount;
+      const changed = it && fixed && m !== "once" && (kindOf(it) !== "fixed" || parseAmount(amtIn.value) !== curAmount);
       sh.querySelector("#fromWrap").style.visibility = changed ? "visible" : "hidden";
     };
     modeSel.onchange = sync; kindSel.onchange = () => { kindTouched = true; sync(); }; amtIn.oninput = sync;
@@ -1100,10 +1198,22 @@ function openEditor(id){
     };
     sh.querySelector("#cancel").onclick = closeSheet;
     const del = sh.querySelector("#del");
+    const fin = sh.querySelector("#finish");
+    if(fin) fin.onclick = () => {
+      const prevEnd = it.end;
+      if(!updateItem(id, {end: cp})) { sh.querySelector("#fErr").textContent = dbErr(); return; }
+      closeSheet(); render();
+      toast(`${it.name}: ${ML[Number(cp.slice(5))-1]} son ay`, "Geri al", () => { updateItem(id, {end: prevEnd}); render(); });
+    };
     if(del) del.onclick = async () => {
-      if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
+      if(del.dataset.confirm !== "1"){
+        const paidN = Object.values(S.months).filter(m => m.paid && m.paid[id]).length;
+        del.dataset.confirm = "1";
+        del.textContent = paidN ? `${paidN} aylık ödeme geçmişi de görünümlerden kalkar. Silmek için tekrar dokunun` : "Silmek için tekrar dokunun";
+        return;
+      }
       del.disabled = true;
-      try { await deleteItem(id); closeSheet(); toast(`${it.name} silindi`); }
+      try { await deleteItem(id); closeSheet(); toast(`${it.name} silindi`, "Geri al", () => saveItem(id, (({id: _, ...rest}) => rest)(it))); }
       catch(err){ sh.querySelector("#fErr").textContent = dbErr(); del.disabled = false; }
     };
     sh.querySelector("#f").onsubmit = async ev => {
@@ -1126,25 +1236,29 @@ function openEditor(id){
         const day = Number(sh.querySelector("#fDay").value);
         if(!Number.isInteger(day) || day < 1 || day > 31){ err.textContent = "Ayın gününü 1 ile 31 arasında yazın."; return; }
         if(mode === "months" && !months.length){ err.textContent = "En az bir ay seçin."; return; }
-        const start = sh.querySelector("#fStart").value || cp;
+        // An item saved without a start month (old backups) keeps having none; inventing one would hide its past.
+        const start = sh.querySelector("#fStart").value || (it && !it.once ? null : cp);
         const end = sh.querySelector("#fEnd").value || null;
-        if(end && end < start){ err.textContent = "Son ay, başlangıç ayından önce olamaz."; return; }
+        if(end && start && end < start){ err.textContent = "Son ay, başlangıç ayından önce olamaz."; return; }
         const kind = kindSel.value;
-        Object.assign(data, {once: null, day, months: mode === "months" ? months : ALL, start, kind});
+        Object.assign(data, {once: null, day, months: mode === "months" ? months : ALL, kind});
+        if(start) data.start = start; else delete data.start;
         if(end) data.end = end; else delete data.end;
         if(kind === "fixed"){
           const rm = Number(sh.querySelector("#fRenew").value) || null;
           if(rm) data.renewMonth = rm; else delete data.renewMonth;
           let prices = Array.isArray(data.prices) ? [...data.prices] : [];
-          if(!it || kindOf(it) !== "fixed" || !prices.length){
-            prices = amount != null ? [{from: start, amount}] : [];
-          } else if(amount !== curAmount){
+          if(!it || it.once){
+            prices = amount != null ? [{from: start || cp, amount}] : [];
+          } else if(kindOf(it) !== "fixed" || amount !== curAmount){
+            // was variable, or the amount changed: the new figure holds from the chosen month on
             const from = sh.querySelector("#fFrom").value || cp;
-            prices = prices.filter(p => p.from !== from).concat(amount != null ? [{from, amount}] : []);
+            prices = (prices.length || amount != null) ? setPriceFrom(prices, from, amount) : [];
           }
           data.prices = prices; data.amount = amount;
         } else {
-          data.amount = amount; delete data.prices; delete data.renewMonth;
+          // price history is kept (unused while variable) so switching back to fixed does not lose it
+          data.amount = amount; delete data.renewMonth;
         }
       }
       const btn = sh.querySelector("#save"); btn.disabled = true;
@@ -1161,7 +1275,7 @@ function openCats(){
   const draw = sh => {
     sh.querySelector("#catList").innerHTML = rows.map((c, i) => `
       <div class="cat-row" data-i="${i}">
-        <button type="button" class="hue" data-act2="hue" style="--h:${c.h}" aria-label="Rengi değiştir"></button>
+        <button type="button" class="hue" data-act2="hue" style="--h:${Number(c.h)||0}" aria-label="Rengi değiştir"></button>
         <input data-f="label" value="${esc(c.label)}" aria-label="Kategori adı" placeholder="Kategori adı">
         <select data-f="kind" aria-label="Varsayılan tutar türü"><option value="fixed" ${c.kind==="fixed"?"selected":""}>Sabit</option><option value="variable" ${c.kind==="variable"?"selected":""}>Değişken</option></select>
         <button type="button" class="x" data-act2="del" aria-label="Kategoriyi sil">×</button>
@@ -1228,23 +1342,28 @@ function openCats(){
 function backupData(){
   return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos};
 }
-function markBackedUp(){ S.lastBackup = new Date().toISOString(); persist(); render(); }
+function markBackedUp(){ if(S.failed) return; S.lastBackup = new Date().toISOString(); persist(); render(); }
+// While saved data cannot be read, "backup" hands out that unreadable text untouched, so it can still be rescued.
+const backupText = pretty => S.failed ? (S.badRaw || "") : JSON.stringify(backupData(), null, pretty ? 1 : 0);
 // Android's share sheet refuses .json files, so shared backups go out as plain text (.txt); restore accepts both.
 function backupFile(ext = "json"){
   const name = `odemeler-yedek-${iso(todayDate())}.${ext}`;
-  return new File([JSON.stringify(backupData(), null, 1)], name, {type: ext === "txt" ? "text/plain" : "application/json"});
+  const name2 = S.failed ? name.replace("yedek", "okunamayan-veri") : name;
+  return new File([backupText(true)], name2, {type: ext === "txt" ? "text/plain" : "application/json"});
 }
 
 function openMenu(){
-  const last = S.lastBackup ? fmtLong.format(new Date(S.lastBackup)) : "hiç alınmadı";
+  const lb = S.lastBackup ? new Date(S.lastBackup) : null;
+  const last = lb && !isNaN(lb) ? fmtLong.format(lb) : "hiç alınmadı";
   const canShare = !!(navigator.canShare && navigator.canShare({files:[backupFile("txt")]}));
   const html = `
     <h3>Yedek</h3>
-    <p class="lead">Ödemeleriniz ve şube bilgileriniz yalnızca bu telefonda saklanıyor. Telefon değişirse ya da uygulama silinirse yedek dosyasıyla geri getirirsiniz. Son yedek: <b>${esc(last)}</b>.</p>
+    ${S.failed ? `<p class="lead"><b>Kayıtlı veriler okunamadı.</b> Aşağıdaki düğmeler okunamayan ham veriyi olduğu gibi verir; geri yüklemeden önce saklayın ki gerekirse kurtarılabilsin.</p>` :
+    `<p class="lead">Ödemeleriniz ve şube bilgileriniz yalnızca bu telefonda saklanıyor. Telefon değişirse ya da uygulama silinirse yedek dosyasıyla geri getirirsiniz. Son yedek: <b>${esc(last)}</b>.</p>`}
     <div class="btns">
-      ${canShare ? `<button class="btn primary" type="button" id="share">Yedeği OneDrive'a / Drive'a gönder</button>` : ""}
-      <button class="btn ${canShare?"":"primary"}" type="button" id="dl">Yedek dosyasını indir</button>
-      <button class="btn ghost" type="button" id="copy">Yedeği panoya kopyala</button>
+      ${canShare ? `<button class="btn primary" type="button" id="share">${S.failed ? "Ham veriyi" : "Yedeği"} OneDrive'a / Drive'a gönder</button>` : ""}
+      <button class="btn ${canShare?"":"primary"}" type="button" id="dl">${S.failed ? "Ham veriyi indir" : "Yedek dosyasını indir"}</button>
+      <button class="btn ghost" type="button" id="copy">${S.failed ? "Ham veriyi" : "Yedeği"} panoya kopyala</button>
     </div>
     <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="toCats">Kategorileri düzenle</button></div>
     <div class="field" style="margin-top:18px"><label for="impFile">Yedekten geri yükle</label><input id="impFile" type="file" accept=".json,.txt,application/json,text/plain"></div>
@@ -1274,18 +1393,29 @@ function openMenu(){
       markBackedUp(); closeSheet(); toast("Yedek İndirilenler klasörüne kaydedildi");
     };
     sh.querySelector("#copy").onclick = async () => {
-      const data = JSON.stringify(backupData());
+      const data = backupText(false);
       try { await navigator.clipboard.writeText(data); markBackedUp(); closeSheet(); toast("Yedek panoya kopyalandı"); }
       catch(e){ sh.querySelector("#impTxt").value = data; msg.style.color = "var(--muted)"; msg.textContent = "Pano kullanılamadı. Yedek aşağıdaki kutuya yazıldı, oradan kopyalayın."; }
     };
-    sh.querySelector("#impFile").onchange = async e => { const f = e.target.files[0]; if(f) sh.querySelector("#impTxt").value = await f.text(); };
     const imp = sh.querySelector("#imp");
+    const IMP_LABEL = imp.textContent;
+    // A confirmation only counts for the backup it was asked about: changing the file or text asks again.
+    const resetConfirm = () => { delete imp.dataset.confirm; imp.textContent = IMP_LABEL; msg.textContent = ""; };
+    sh.querySelector("#impTxt").addEventListener("input", resetConfirm);
+    sh.querySelector("#impFile").onchange = async e => {
+      const f = e.target.files[0]; if(!f) return;
+      resetConfirm(); imp.disabled = true; imp.textContent = "Dosya okunuyor…";
+      try { sh.querySelector("#impTxt").value = (await f.text()).replace(/^\uFEFF/, ""); }
+      catch(err){ msg.textContent = "Dosya okunamadı. Tekrar seçin ya da metni yapıştırın."; }
+      imp.disabled = false; imp.textContent = IMP_LABEL;
+    };
     imp.onclick = () => {
       msg.style.color = "";
       let data;
-      try { data = JSON.parse(sh.querySelector("#impTxt").value); } catch(e){ msg.textContent = "Bu metin geçerli bir yedek değil. Dosyayı seçin ya da metnin tamamını yapıştırın."; return; }
+      try { data = JSON.parse(sh.querySelector("#impTxt").value.replace(/^\uFEFF/, "")); } catch(e){ msg.textContent = "Bu metin geçerli bir yedek değil. Dosyayı seçin ya da metnin tamamını yapıştırın."; return; }
       if(data && !Array.isArray(data.items) && Array.isArray(data.infos)){
-        const infos = data.infos.filter(c => c && c.id && c.title);
+        if(S.failed){ msg.textContent = "Kayıtlı veriler okunamadığı için önce tam yedeği (ödemeler dahil) yükleyin."; return; }
+        const infos = cleanInfos(data.infos);
         if(S.infos.length && imp.dataset.confirm !== "1"){
           imp.dataset.confirm = "1";
           imp.textContent = `Mevcut ${S.infos.length} bilgi kartının yerine ${infos.length} kart yüklensin mi? Ödemeleriniz değişmez. Onaylamak için tekrar dokunun`;
@@ -1298,18 +1428,24 @@ function openMenu(){
       }
       if(!data || !Array.isArray(data.items)){ msg.textContent = "Yedekte ödeme kalemi bulunamadı."; return; }
       const items = data.items.filter(i => i && i.id && i.name);
-      if(S.items.length && imp.dataset.confirm !== "1"){
+      const replacesInfos = Array.isArray(data.infos) && S.infos.length;
+      if((S.items.length || replacesInfos) && imp.dataset.confirm !== "1"){
         imp.dataset.confirm = "1";
-        imp.textContent = `Mevcut ${S.items.length} kalemin yerine ${items.length} kalem yüklensin mi? Onaylamak için tekrar dokunun`;
+        const parts = [];
+        if(S.items.length) parts.push(`mevcut ${S.items.length} kalemin yerine ${items.length} kalem`);
+        if(replacesInfos) parts.push(`${S.infos.length} bilgi kartının yerine ${cleanInfos(data.infos).length} kart`);
+        imp.textContent = `${parts.join(" ve ")} yüklensin mi? Onaylamak için tekrar dokunun`.replace(/^./, c => c.toLocaleUpperCase("tr"));
         return;
       }
-      const mig = migrate({...data, items});
+      let mig;
+      try { mig = migrate({...data, items}); } catch(e){ msg.textContent = "Bu yedek okunamadı."; return; }
       const months = mig.months;
       const prev = {items:S.items, months:S.months, cats:S.cats};
-      const prevInfos = S.infos;
+      const prevInfos = S.infos, prevFailed = S.failed;
       S.items = mig.items; S.months = months; S.cats = mig.cats; S.failed = null;
-      if(Array.isArray(data.infos)) S.infos = data.infos.filter(c => c && c.id && c.title);
-      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; msg.textContent = dbErr(); return; }
+      if(Array.isArray(data.infos)) S.infos = cleanInfos(data.infos);
+      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; S.failed = prevFailed; msg.textContent = dbErr(); return; }
+      S.badRaw = null;
       closeSheet(); render(); toast(`${mig.items.length} kalem yedekten yüklendi`);
     };
   });
@@ -1323,10 +1459,29 @@ function boot(){
   load();
   render();
   try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
-  if("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+  if("serviceWorker" in navigator && location.protocol === "https:"){
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      // an app brought back from the background never reloads on its own, so look for a new version then
+      document.addEventListener("visibilitychange", () => { if(!document.hidden) reg.update().catch(()=>{}); });
+    }).catch(()=>{});
+    // a new version took over: offer to reload (not on first install, when there was no older version)
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if(!hadController || boot.updateShown) return;
+      boot.updateShown = true;
+      const show = () => toast("Uygulamanın yeni sürümü hazır.", "Yenile", () => location.reload());
+      if($(".overlay")) setTimeout(show, 8000); else show();
+    });
+  }
 }
 // keep "today" right on an app left open overnight
-function tick(){ const n = iso(todayDate()); if(n !== tick.d){ tick.d = n; $("#today").textContent = fmtHead.format(todayDate()); render(); } }
+function tick(){
+  const n = iso(todayDate());
+  if(n === tick.d) return;
+  // a new month: the Aylık tab follows along if it was showing the month that just ended
+  if(n.slice(0,7) !== tick.d.slice(0,7) && S.cursor === tick.d.slice(0,7)) S.cursor = n.slice(0,7);
+  tick.d = n; $("#today").textContent = fmtHead.format(todayDate()); render();
+}
 tick.d = iso(todayDate());
 setInterval(tick, 60000);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(); });
