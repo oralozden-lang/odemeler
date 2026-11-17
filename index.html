@@ -193,7 +193,28 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
 .cat-row .x{height:36px;border:1px solid var(--line);background:transparent;border-radius:10px;color:var(--late);font-size:20px}
 .cat-move{grid-column:1/-1;display:grid;gap:6px;background:var(--late-soft);color:var(--late);border-radius:10px;padding:10px;font-size:13px;font-weight:600}
 .cat-move .btn{padding:9px}
-.chip-edit{border-style:dashed;color:var(--accent)}
+.fbar{position:relative;display:flex;gap:6px;margin:0 0 14px}
+.search + .fbar{margin-top:10px}
+.fbtn{flex:1;display:flex;align-items:center;gap:8px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;height:46px;padding:0 12px;text-align:left}
+.fbtn .fl{font-size:12.5px;font-weight:700;color:var(--muted);flex:none}
+.fbtn .fv{flex:1;font-weight:700;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fbtn svg{width:18px;height:18px;color:var(--muted);flex:none;transition:transform .15s}
+.fbtn[aria-expanded="true"] svg{transform:rotate(180deg)}
+.fbtn.on{border-color:var(--accent);background:var(--accent-soft)}
+.fbtn.on .fv{color:var(--accent)}
+.fclear{flex:none;width:46px;height:46px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-size:22px;color:var(--muted)}
+.fpanel{position:absolute;left:0;right:0;top:52px;z-index:15;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 16px 40px rgba(20,33,42,.18);padding:6px;max-height:60vh;overflow:auto}
+.fopt{display:flex;align-items:center;gap:10px;padding:11px 10px;border-radius:10px;font-weight:600;font-size:15px}
+.fopt:active{background:var(--surface-2)}
+.fopt input{width:20px;height:20px;accent-color:var(--accent);margin:0;flex:none}
+.fopt .dot{width:10px;height:10px;border-radius:50%;background:hsl(var(--h) var(--cat-s) var(--cat-l));flex:none}
+.fopt .grow{flex:1}
+.fopt .cnt{font-size:12.5px;color:var(--muted);font-weight:700}
+.factions{display:flex;gap:6px;border-top:1px solid var(--line);margin-top:4px;padding:8px 4px 4px;flex-wrap:wrap}
+.factions button{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:8px 10px;font-size:13px;font-weight:700;color:var(--muted)}
+.factions .done{margin-left:auto;background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.alert.soft{background:#FFF6E5;color:#7A4B07}
+.alert.soft b{color:var(--accent)}
 .banner.nag{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#FFF6E5;border-color:#F3D9A4;color:#7A4B07}
 .banner.nag b{flex:none;color:var(--accent);font-size:13.5px}
 @keyframes fade{from{opacity:0}}
@@ -281,7 +302,7 @@ const ICON = {
 /* ---------- state ---------- */
 const S = {
   items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], iq:"", lastBackup:null, failed:null,
-  tab:"ajanda", cursor:null, monthFilter:"all", q:"", cat:"all"
+  tab:"ajanda", cursor:null, monthFilter:"all", q:"", catSel:loadCatSel(), filterOpen:false
 };
 
 /* ---------- helpers ---------- */
@@ -371,6 +392,38 @@ function amountFor(it, period, paid){
   if(e != null) return {v: e, est: false};
   const v = lastKnown(it, period);
   return {v, est: v != null};
+}
+
+/* ---------- category filter (shared by Yaklaşan, Aylık, Kalemler) ---------- */
+function loadCatSel(){ try { const v = JSON.parse(localStorage.getItem("odemeler.filter") || "[]"); return Array.isArray(v) ? v : []; } catch(e){ return []; } }
+function saveCatSel(){ try { localStorage.setItem("odemeler.filter", JSON.stringify(S.catSel)); } catch(e){} }
+const inFilter = it => !S.catSel.length || S.catSel.includes(it.cat || "");
+const filtered = list => S.catSel.length ? list.filter(o => inFilter(o.it || o)) : list;
+function filterLabel(){
+  const n = S.catSel.length;
+  if(!n) return "Tümü";
+  const names = S.catSel.map(id => (S.cats.find(c => c.id === id) || NO_CAT).label);
+  return n <= 2 ? names.join(", ") : `${n} kategori`;
+}
+function filterBarHTML(){
+  const n = S.catSel.length;
+  const counts = {}; S.items.forEach(i => { const k = i.cat || ""; counts[k] = (counts[k]||0) + 1; });
+  const opts = [...S.cats.map(c => ({id:c.id, label:c.label, h:c.h})), ...(counts[""] ? [{id:"", label:"Kategorisiz", h:210}] : [])];
+  return `<div class="fbar">
+    <button class="fbtn${n?" on":""}" type="button" data-act="filter-toggle" aria-expanded="${S.filterOpen}" aria-controls="fpanel">
+      <span class="fl">Kategori</span><span class="fv">${esc(filterLabel())}</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    ${n ? `<button class="fclear" type="button" data-act="filter-clear" aria-label="Filtreyi temizle">×</button>` : ""}
+    ${S.filterOpen ? `<div class="fpanel" id="fpanel" role="group" aria-label="Kategoriler">
+      ${opts.map(o => `<label class="fopt"><input type="checkbox" data-fcat="${esc(o.id)}" ${S.catSel.includes(o.id)?"checked":""}><span class="dot" style="--h:${o.h}"></span><span class="grow">${esc(o.label)}</span><span class="cnt">${counts[o.id]||0}</span></label>`).join("")}
+      <div class="factions">
+        <button type="button" data-act="filter-clear">Tümünü göster</button>
+        <button type="button" data-act="cats">Kategorileri düzenle</button>
+        <button type="button" class="done" data-act="filter-toggle">Tamam</button>
+      </div>
+    </div>` : ""}
+  </div>`;
 }
 
 /* ---------- occurrences ---------- */
@@ -551,7 +604,7 @@ function sectionHTML(title, list, opts = {}){
 
 /* ---------- views ---------- */
 function heroHTML(period){
-  const occ = occurrences(period);
+  const occ = filtered(occurrences(period));
   const total = sum(occ);
   const paid = occ.filter(o => o.paid);
   const paidSum = sum(paid);
@@ -560,7 +613,7 @@ function heroHTML(period){
   const pct = total ? Math.round(paidSum / total * 100) : 0;
   const [y,m] = period.split("-").map(Number);
   return `<div class="hero">
-    <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan</span><span class="sub num">%${pct} ödendi</span></div>
+    <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan${S.catSel.length ? " · filtreli" : ""}</span><span class="sub num">%${pct} ödendi</span></div>
     <div class="big num">${est ? "~" : ""}${tl(left)}</div>
     <div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <div class="split">
@@ -572,7 +625,7 @@ function heroHTML(period){
 }
 
 function renewalsHTML(){
-  const due = S.items.map(it => ({it, key: renewalDue(it)})).filter(x => x.key);
+  const due = S.items.filter(inFilter).map(it => ({it, key: renewalDue(it)})).filter(x => x.key);
   if(!due.length) return "";
   return `<section class="section"><div class="sec-head"><h2>Yenilemeler <span class="count">${due.length}</span></h2></div>
     <div class="list">${due.map(({it, key}) => {
@@ -591,12 +644,15 @@ function renewalsHTML(){
 function viewAjanda(){
   const t = iso(todayDate());
   const cp = curPeriod();
-  const all = occRange(addMonths(cp,-3), addMonths(cp,2));
+  const every = occRange(addMonths(cp,-3), addMonths(cp,2));
+  const all = filtered(every);
   const late = all.filter(o => !o.paid && o.date < t);
+  const hiddenLate = every.filter(o => !o.paid && o.date < t && !inFilter(o.it));
   const today = all.filter(o => o.date === t);
   const week = all.filter(o => { const d = daysBetween(t,o.date); return d>=1 && d<=7; });
   const soon = all.filter(o => { const d = daysBetween(t,o.date); return d>=8 && d<=30 && !o.paid; });
-  let h = heroHTML(cp);
+  let h = filterBarHTML() + heroHTML(cp);
+  if(hiddenLate.length) h += `<button class="alert soft" type="button" data-act="filter-clear">${ICON.alert}<span class="grow">Filtre dışında ${hiddenLate.length} geciken ödeme var</span><b>Göster</b></button>`;
   if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tl(sum(late))}</span></button>`;
   h += sectionHTML("Gecikenler", late, {cls:"sec-late"});
   h += renewalsHTML();
@@ -609,7 +665,7 @@ function viewAjanda(){
 function viewAy(){
   const p = S.cursor || curPeriod();
   const [y,m] = p.split("-").map(Number);
-  const occ = occurrences(p);
+  const occ = filtered(occurrences(p));
   const f = S.monthFilter;
   const shown = occ.filter(o => f==="all" || (f==="open" ? !o.paid : !!o.paid));
   const t = iso(todayDate());
@@ -619,7 +675,7 @@ function viewAy(){
     <h2>${ML[m-1]} ${y}</h2>
     <button class="icon-btn" type="button" data-act="next" aria-label="Sonraki ay">${ICON.right}</button>
   </div>`;
-  h += heroHTML(p);
+  h = filterBarHTML() + h + heroHTML(p);
   if(varCount) h += `<button class="btn primary wide" type="button" data-act="amounts" data-period="${p}">Bu ayın tutarlarını gir · ${varCount} değişken kalem</button>`;
   h += `<div class="seg" role="group" aria-label="Filtre">
     <button type="button" data-filter="all" aria-pressed="${f==="all"}">Tümü · ${occ.length}</button>
@@ -640,19 +696,14 @@ function viewAy(){
 function viewKalemler(){
   const q = S.q.trim().toLocaleLowerCase("tr");
   const cp = curPeriod();
-  let list = S.items.filter(i => (S.cat==="all" || (i.cat||"")===S.cat) && (!q || (i.name+" "+(i.note||"")).toLocaleLowerCase("tr").includes(q)));
+  let list = S.items.filter(i => inFilter(i) && (!q || (i.name+" "+(i.note||"")).toLocaleLowerCase("tr").includes(q)));
   list.sort((a,b) => (a.once?1:0)-(b.once?1:0) || (a.once||"").localeCompare(b.once||"") || (a.day||0)-(b.day||0) || a.name.localeCompare(b.name,"tr"));
-  const occ = occurrences(cp);
-  const fixedN = S.items.filter(i => !i.once && kindOf(i) === "fixed").length;
-  const varN = S.items.filter(i => !i.once && kindOf(i) === "variable").length;
+  const occ = filtered(occurrences(cp));
+  const fixedN = S.items.filter(inFilter).filter(i => !i.once && kindOf(i) === "fixed").length;
+  const varN = S.items.filter(inFilter).filter(i => !i.once && kindOf(i) === "variable").length;
   const counts = {}; S.items.forEach(i => { counts[i.cat||""] = (counts[i.cat||""]||0) + 1; });
   let h = `<label class="search" for="q">${ICON.search}<input id="q" type="search" placeholder="Kalem veya not ara" value="${esc(S.q)}" autocomplete="off"></label>
-  <div class="chips" role="group" aria-label="Kategori">
-    <button class="chip" type="button" data-cat="all" aria-pressed="${S.cat==="all"}">Tümü · ${S.items.length}</button>
-    ${S.cats.filter(c => counts[c.id]).map(c => `<button class="chip" type="button" data-cat="${esc(c.id)}" aria-pressed="${S.cat===c.id}">${esc(c.label)} · ${counts[c.id]}</button>`).join("")}
-    ${counts[""] ? `<button class="chip" type="button" data-cat="" aria-pressed="${S.cat===""}">Kategorisiz · ${counts[""]}</button>` : ""}
-    <button class="chip chip-edit" type="button" data-act="cats">Kategorileri düzenle</button>
-  </div>
+  ${filterBarHTML()}
   <div class="stat-row">
     <div class="stat"><span>Sabit · değişken</span><b class="num">${fixedN} · ${varN} kalem</b></div>
     <div class="stat"><span>${ML[Number(cp.slice(5))-1]} toplamı</span><b class="num">${estCount(occ)?"~":""}${tl(sum(occ))}</b></div>
@@ -793,10 +844,10 @@ function quickToggle(id, period){
 document.addEventListener("click", e => {
   const tabBtn = e.target.closest("nav.tabs button");
   if(tabBtn){ setTab(tabBtn.dataset.tab); return; }
-  const el = e.target.closest("[data-act],[data-filter],[data-cat]");
+  const el = e.target.closest("[data-act],[data-filter]");
+  if(S.filterOpen && !e.target.closest(".fbar") && !e.target.closest(".overlay")){ S.filterOpen = false; render(); if(!el) return; }
   if(!el || el.closest(".overlay")) return;
   if(el.dataset.filter){ S.monthFilter = el.dataset.filter; render(); return; }
-  if(el.dataset.cat !== undefined && !el.dataset.act){ S.cat = el.dataset.cat; render(); return; }
   const act = el.dataset.act;
   const row = el.closest(".item");
   if(act === "toggle") quickToggle(row.dataset.id, row.dataset.period);
@@ -807,10 +858,18 @@ document.addEventListener("click", e => {
   else if(act === "backup") openMenu();
   else if(act === "amounts") openAmounts(el.dataset.period || curPeriod());
   else if(act === "renew") openRenewal(row.dataset.id, el.dataset.key);
-  else if(act === "cats") openCats();
+  else if(act === "cats"){ S.filterOpen = false; render(); openCats(); }
+  else if(act === "filter-toggle"){ S.filterOpen = !S.filterOpen; render(); }
+  else if(act === "filter-clear"){ S.catSel = []; S.filterOpen = false; saveCatSel(); render(); }
   else if(act === "copy") copyValue(el.dataset.v);
   else if(act === "info-edit") openInfoEditor(el.dataset.id);
   else if(act === "jump-late"){ const s = document.querySelector(".sec-late"); if(s) s.scrollIntoView({behavior:"smooth", block:"start"}); }
+});
+document.addEventListener("change", e => {
+  const cb = e.target.closest("[data-fcat]"); if(!cb) return;
+  const id = cb.dataset.fcat;
+  S.catSel = cb.checked ? [...new Set([...S.catSel, id])] : S.catSel.filter(x => x !== id);
+  saveCatSel(); render();
 });
 document.addEventListener("input", e => {
   if(e.target.id === "q"){ S.q = e.target.value; render(); }
@@ -901,7 +960,7 @@ function openDetail(id, period, focusAmount){
 
 function openAmounts(period){
   const [y,m] = period.split("-").map(Number);
-  const list = occurrences(period).filter(o => !o.paid && kindOf(o.it) === "variable");
+  const list = filtered(occurrences(period)).filter(o => !o.paid && kindOf(o.it) === "variable");
   if(!list.length){ toast("Bu ay girilecek değişken tutar yok"); return; }
   const html = `
     <h3>${ML[m-1]} ${y} tutarları</h3>
@@ -974,7 +1033,7 @@ function openEditor(id){
   const cp = curPeriod();
   const mode = it ? (it.once ? "once" : ((it.months && it.months.length && it.months.length < 12) ? "months" : "monthly")) : "monthly";
   let months = it && it.months && it.months.length && it.months.length < 12 ? [...it.months] : [Number(cp.slice(5))];
-  const startCat = it ? (it.cat || "") : (S.cat !== "all" && S.cats.some(c => c.id === S.cat) ? S.cat : (S.cats[0] ? S.cats[0].id : ""));
+  const startCat = it ? (it.cat || "") : (S.catSel.length === 1 && S.cats.some(c => c.id === S.catSel[0]) ? S.catSel[0] : (S.cats[0] ? S.cats[0].id : ""));
   const startKind = it ? kindOf(it) : ((S.cats.find(c => c.id === startCat) || NO_CAT).kind);
   const curAmount = it ? (kindOf(it) === "fixed" ? priceAt(it, cp) : it.amount) : null;
   const html = `
@@ -1159,7 +1218,7 @@ function openCats(){
       const resolve = id => { let t = id, n = 0; while(t in moves && n++ < 20) t = moves[t]; return t; };
       S.cats = rows.map(({_deleting, ...c}) => ({...c, label: c.label.trim()}));
       S.items = S.items.map(i => (i.cat in moves) ? {...i, cat: resolve(i.cat)} : i);
-      if(S.cat !== "all" && !S.cats.some(c => c.id === S.cat)) S.cat = "all";
+      S.catSel = S.catSel.filter(id => id === "" || S.cats.some(c => c.id === id)); saveCatSel();
       if(!persist()){ sh.querySelector("#cErr").textContent = dbErr(); return; }
       closeSheet(); render(); toast("Kategoriler kaydedildi");
     };
