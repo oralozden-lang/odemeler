@@ -1,6 +1,6 @@
 // Ödemeler service worker: keeps the app usable offline.
 // Bump VERSION whenever index.html or the icons change, so phones pick up the update.
-const VERSION = "odemeler-v2";
+const VERSION = "odemeler-v3";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

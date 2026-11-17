@@ -175,6 +175,25 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
 .frow-ed input{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px;font-size:15px;outline:0;min-width:0}
 .frow-ed input:focus{border-color:var(--accent);background:var(--surface)}
 .frow-ed button{border:1px solid var(--line);background:transparent;border-radius:10px;color:var(--late);font-size:20px;line-height:1}
+.est{color:var(--muted);font-weight:600}
+.hero-note{border:0;background:rgba(255,255,255,.08);color:var(--hero-muted);border-radius:12px;padding:9px 12px;font-size:13px;text-align:left}
+.hero-note b{color:var(--hero-fill)}
+.btn.wide{width:100%;margin-top:12px}
+.item.renew .amt small{color:var(--accent);font-weight:700}
+.amt-row{display:grid;grid-template-columns:1fr 132px;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.amt-row:first-child{border-top:0}
+.amt-row label{display:grid;gap:2px;min-width:0}
+.amt-row label b{font-size:14.5px;overflow-wrap:anywhere}
+.amt-row label span{font-size:12px;color:var(--muted)}
+.amt-row input{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px;font-size:16px;text-align:right;outline:0;font-variant-numeric:tabular-nums}
+.amt-row input:focus{border-color:var(--accent);background:var(--surface)}
+.cat-row{display:grid;grid-template-columns:36px 1fr 104px 36px;gap:6px;align-items:center;margin-bottom:8px}
+.cat-row input,.cat-row select{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:9px;font-size:15px;outline:0;min-width:0}
+.cat-row .hue{width:36px;height:36px;border-radius:10px;border:0;background:hsl(var(--h) var(--cat-s) var(--cat-l))}
+.cat-row .x{height:36px;border:1px solid var(--line);background:transparent;border-radius:10px;color:var(--late);font-size:20px}
+.cat-move{grid-column:1/-1;display:grid;gap:6px;background:var(--late-soft);color:var(--late);border-radius:10px;padding:10px;font-size:13px;font-weight:600}
+.cat-move .btn{padding:9px}
+.chip-edit{border-style:dashed;color:var(--accent)}
 .banner.nag{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#FFF6E5;border-color:#F3D9A4;color:#7A4B07}
 .banner.nag b{flex:none;color:var(--accent);font-size:13.5px}
 @keyframes fade{from{opacity:0}}
@@ -230,17 +249,20 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
 "use strict";
 
 /* ---------- constants ---------- */
-const CATS = {
-  kira:     {label:"Kira", h:228},
-  kart:     {label:"Kredi kartı", h:340},
-  sgk:      {label:"SGK", h:178},
-  vergi:    {label:"Vergi", h:32},
-  fatura:   {label:"Fatura & aidat", h:200},
-  personel: {label:"Personel", h:268},
-  isletme:  {label:"İşletme", h:140},
-  borc:     {label:"Senet & borç", h:12},
-  diger:    {label:"Diğer", h:210}
-};
+const HUES = [228,340,178,32,200,268,140,12,210,50,300,90];
+const DEFAULT_CATS = [
+  {id:"kira",     label:"Kira",          h:228, kind:"fixed"},
+  {id:"aidat",    label:"Aidat",         h:50,  kind:"fixed"},
+  {id:"kart",     label:"Kredi kartı",   h:340, kind:"variable"},
+  {id:"sgk",      label:"SGK",           h:178, kind:"variable"},
+  {id:"vergi",    label:"Vergi",         h:32,  kind:"variable"},
+  {id:"fatura",   label:"Fatura",        h:200, kind:"variable"},
+  {id:"personel", label:"Personel",      h:268, kind:"variable"},
+  {id:"isletme",  label:"İşletme",       h:140, kind:"variable"},
+  {id:"borc",     label:"Senet & borç",  h:12,  kind:"fixed"},
+  {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
+];
+const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 const ALL = [1,2,3,4,5,6,7,8,9,10,11,12];
@@ -258,7 +280,7 @@ const ICON = {
 
 /* ---------- state ---------- */
 const S = {
-  items:[], months:{}, infos:[], iq:"", lastBackup:null, failed:null,
+  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], iq:"", lastBackup:null, failed:null,
   tab:"ajanda", cursor:null, monthFilter:"all", q:"", cat:"all"
 };
 
@@ -316,7 +338,40 @@ function daySuffix(n){
   if(last === 0 && tens === 0) return "ü";
   return ({1:"i",2:"si",3:"ü",4:"ü",5:"i",6:"sı",7:"si",8:"i",9:"u"})[last] || "i";
 }
-const catOf = it => CATS[it.cat] || CATS.diger;
+const NO_CAT = {id:"", label:"Kategorisiz", h:210, kind:"variable"};
+const catOf = it => S.cats.find(c => c.id === it.cat) || NO_CAT;
+const kindOf = it => it.once ? "fixed" : (it.kind || catOf(it).kind || "variable");
+function priceAt(it, period){
+  const ps = Array.isArray(it.prices) ? [...it.prices].sort((a,b) => a.from.localeCompare(b.from)) : [];
+  if(!ps.length) return it.amount ?? null;
+  let v = ps[0].amount;
+  for(const p of ps) if(p.from <= period) v = p.amount;
+  return v ?? null;
+}
+function enteredAmount(it, period){
+  const m = S.months[period];
+  const v = m && m.amounts ? m.amounts[it.id] : undefined;
+  return v == null ? null : v;
+}
+function lastKnown(it, period){
+  for(let k = 1; k <= 12; k++){
+    const m = S.months[addMonths(period, -k)];
+    if(!m) continue;
+    const p = m.paid && m.paid[it.id];
+    if(p && p.amount != null) return p.amount;
+    if(m.amounts && m.amounts[it.id] != null) return m.amounts[it.id];
+  }
+  return it.amount ?? null;
+}
+// What this item costs in a given month, and whether that figure is only an estimate.
+function amountFor(it, period, paid){
+  if(paid && paid.amount != null) return {v: paid.amount, est: false};
+  if(kindOf(it) === "fixed") return {v: priceAt(it, period), est: false};
+  const e = enteredAmount(it, period);
+  if(e != null) return {v: e, est: false};
+  const v = lastKnown(it, period);
+  return {v, est: v != null};
+}
 
 /* ---------- occurrences ---------- */
 function occurrences(period){
@@ -336,7 +391,9 @@ function occurrences(period){
       if(!ms.includes(m)) continue;
       date = `${period}-${pad(Math.min(Math.max(1, it.day||1), last))}`;
     }
-    out.push({it, date, period, paid: paidMap[it.id] || null});
+    const paid = paidMap[it.id] || null;
+    const a = amountFor(it, period, paid);
+    out.push({it, date, period, paid, amt: a.v, est: a.est && !paid});
   }
   return out.sort((a,b) => a.date.localeCompare(b.date) || a.it.name.localeCompare(b.it.name,"tr"));
 }
@@ -345,25 +402,67 @@ function occRange(fromP, toP){
   while(p <= toP){ out.push(...occurrences(p)); p = addMonths(p,1); }
   return out;
 }
-const sum = arr => arr.reduce((s,o) => s + (o.paid && o.paid.amount!=null ? o.paid.amount : (o.it.amount||0)), 0);
-const sumDue = arr => arr.reduce((s,o) => s + (o.it.amount||0), 0);
+const sum = arr => arr.reduce((s,o) => s + (o.amt || 0), 0);
+const estCount = arr => arr.filter(o => o.est).length;
+
+/* ---------- renewals ---------- */
+// The renewal this item is due for now (its renewal month, or the month before), unless already handled.
+function renewalDue(it){
+  if(!it.renewMonth || it.once || kindOf(it) !== "fixed") return null;
+  const t = todayDate(); const y = t.getFullYear(), m = t.getMonth() + 1, rm = it.renewMonth;
+  let key = null;
+  if(m === rm) key = ym(y, rm);
+  else if(m % 12 + 1 === rm) key = ym(rm === 1 ? y + 1 : y, rm);
+  if(!key) return null;
+  if(it.end && key > it.end) return null;
+  if((it.renewDone || []).includes(key)) return null;
+  if((it.prices || []).some(p => p.from >= key)) return null;
+  return key;
+}
 
 /* ---------- storage (on this phone) ---------- */
 const KEY = "odemeler.v1";
+const SCHEMA = 2;
+// Brings data saved by older versions (or an old backup) up to the current shape.
+function migrate(d){
+  const out = {items: Array.isArray(d.items) ? d.items.map(i => ({...i})) : [], months: {}, cats: Array.isArray(d.cats) && d.cats.length ? d.cats : DEFAULT_CATS.map(c => ({...c}))};
+  for(const [p, v] of Object.entries(d.months || {})){
+    if(/^\d{4}-\d{2}$/.test(p)) out.months[p] = {paid: (v && v.paid) || {}, amounts: (v && v.amounts) || {}};
+  }
+  if((d.schema || 1) < 2){
+    const monthIdx = s => ML.findIndex(n => n.toLocaleLowerCase("tr") === s.toLocaleLowerCase("tr")) + 1;
+    for(const it of out.items){
+      const m = /([A-Za-zÇĞİÖŞÜçğıöşü]+)\s+yenileme/i.exec(it.note || "");
+      if(m && monthIdx(m[1]) > 0 && !it.renewMonth) it.renewMonth = monthIdx(m[1]);
+      if(/^i\d{3}$/.test(it.id)) it.note = "";
+      if(/aidat/i.test(it.name) && (it.cat === "fatura" || !it.cat)) it.cat = "aidat";
+    }
+    for(const it of out.items){  // "(elden)" rents renew together with their pair
+      const base = it.name.replace(/\s*\(elden\)\s*$/i, "");
+      if(base !== it.name && !it.renewMonth){ const pair = out.items.find(x => x.name === base); if(pair && pair.renewMonth) it.renewMonth = pair.renewMonth; }
+    }
+  }
+  for(const it of out.items){
+    if(!it.kind){ const c = out.cats.find(x => x.id === it.cat); it.kind = it.once ? "fixed" : (c ? c.kind : "variable"); }
+    if(it.kind === "fixed" && !Array.isArray(it.prices) && it.amount != null) it.prices = [{from: it.start || curPeriod(), amount: it.amount}];
+  }
+  return out;
+}
 function load(){
   try {
     const raw = localStorage.getItem(KEY);
     if(!raw) return;
     const d = JSON.parse(raw);
-    S.items = Array.isArray(d.items) ? d.items : [];
-    S.months = d.months && typeof d.months === "object" ? d.months : {};
+    const r = migrate(d);
+    S.items = r.items; S.months = r.months; S.cats = r.cats;
     S.infos = Array.isArray(d.infos) ? d.infos : [];
     S.lastBackup = d.lastBackup || null;
+    if((d.schema || 1) < SCHEMA) persist();
   } catch(e){ S.failed = "Kayıtlı veriler okunamadı. Yedekten geri yükleyebilirsiniz."; }
 }
 function persist(){
   try {
-    localStorage.setItem(KEY, JSON.stringify({version:1, items:S.items, months:S.months, infos:S.infos, lastBackup:S.lastBackup}));
+    localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, lastBackup:S.lastBackup}));
     return true;
   } catch(e){
     toast("Kaydedilemedi: telefonda yer kalmamış olabilir. Hemen yedek alın.");
@@ -372,12 +471,22 @@ function persist(){
 }
 function dbErr(){ return "Kaydedilemedi. Telefonda yer açıp tekrar deneyin."; }
 function newId(){ return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function monthRec(period){ const m = S.months[period] || {}; return {paid: {...(m.paid||{})}, amounts: {...(m.amounts||{})}}; }
 async function setPaid(period, id, rec){
-  const cur = (S.months[period] && S.months[period].paid) || {};
-  const paid = {...cur};
-  if(rec) paid[id] = rec; else delete paid[id];
-  S.months = {...S.months, [period]: {paid}};
+  const m = monthRec(period);
+  if(rec) m.paid[id] = rec; else delete m.paid[id];
+  S.months = {...S.months, [period]: m};
   persist(); render();
+}
+function setAmounts(period, map){  // map: id -> number | null
+  const m = monthRec(period);
+  for(const [id, v] of Object.entries(map)){ if(v == null) delete m.amounts[id]; else m.amounts[id] = v; }
+  S.months = {...S.months, [period]: m};
+  return persist();
+}
+function updateItem(id, patch){
+  S.items = S.items.map(i => i.id === id ? {...i, ...patch} : i);
+  return persist();
 }
 async function saveItem(id, data){
   const nid = id || newId();
@@ -407,6 +516,10 @@ function toast(msg, actionLabel, action){
 }
 
 /* ---------- row ---------- */
+function amtHTML(v, est){
+  if(v == null) return '<small>Tutar yok</small>';
+  return est ? `<span class="est">~${tl(v)}</span><small>tahmini</small>` : tl(v);
+}
 function rowHTML(o, opts = {}){
   const t = iso(todayDate());
   const late = !o.paid && o.date < t;
@@ -414,7 +527,6 @@ function rowHTML(o, opts = {}){
   const rel = relLabel(o.date);
   const d = daysBetween(t, o.date);
   const relCls = (!o.paid && d >= 0 && d <= 2) ? "rel soon" : "rel";
-  const amount = o.paid && o.paid.amount != null ? o.paid.amount : o.it.amount;
   const showDate = opts.hideDate ? "" : `<span>${esc(fmtDay.format(parseISO(o.date)))}</span>`;
   const relPart = o.paid ? `<span class="rel" style="color:var(--ok)">Ödendi</span>` : `<span class="${relCls}">${rel}</span>`;
   return `<div class="item${o.paid?" paid":""}${late?" late":""}" data-id="${esc(o.it.id)}" data-period="${o.period}">
@@ -423,15 +535,16 @@ function rowHTML(o, opts = {}){
       <span class="name">${esc(o.it.name)}</span>
       <span class="meta">${relPart}${showDate ? "<span>·</span>"+showDate : ""}<span class="tag" style="--h:${c.h}">${esc(c.label)}</span>${o.it.note ? ICON.note : ""}</span>
     </button>
-    <div class="amt num">${amount==null ? '<small>Tutar yok</small>' : tl(amount)}</div>
+    <div class="amt num">${amtHTML(o.amt, o.est)}</div>
   </div>`;
 }
 function sectionHTML(title, list, opts = {}){
   if(!list.length && !opts.showEmpty) return "";
-  const total = list.filter(o => !o.paid).reduce((s,o)=>s+(o.it.amount||0),0);
-  const unpaid = list.filter(o => !o.paid).length;
+  const open = list.filter(o => !o.paid);
+  const total = sum(open);
+  const est = estCount(open);
   return `<section class="section ${opts.cls||""}">
-    <div class="sec-head"><h2>${esc(title)} <span class="count">${unpaid}${list.length!==unpaid?"/"+list.length:""}</span></h2>${total ? `<span class="sum num">${tl(total)}</span>` : ""}</div>
+    <div class="sec-head"><h2>${esc(title)} <span class="count">${open.length}${list.length!==open.length?"/"+list.length:""}</span></h2>${total ? `<span class="sum num">${est?"~":""}${tl(total)}</span>` : ""}</div>
     <div class="list">${list.length ? list.map(o => rowHTML(o, opts)).join("") : `<div class="empty-line">${esc(opts.emptyText||"Ödeme yok.")}</div>`}</div>
   </section>`;
 }
@@ -443,17 +556,36 @@ function heroHTML(period){
   const paid = occ.filter(o => o.paid);
   const paidSum = sum(paid);
   const left = Math.max(0, total - paidSum);
+  const est = estCount(occ);
   const pct = total ? Math.round(paidSum / total * 100) : 0;
   const [y,m] = period.split("-").map(Number);
   return `<div class="hero">
     <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan</span><span class="sub num">%${pct} ödendi</span></div>
-    <div class="big num">${tl(left)}</div>
+    <div class="big num">${est ? "~" : ""}${tl(left)}</div>
     <div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <div class="split">
       <div><span class="sub">Ödenen · ${paid.length} kalem</span><b class="num">${tl(paidSum)}</b></div>
-      <div><span class="sub">Ay toplamı · ${occ.length} kalem</span><b class="num">${tl(total)}</b></div>
+      <div><span class="sub">Ay toplamı · ${occ.length} kalem</span><b class="num">${est ? "~" : ""}${tl(total)}</b></div>
     </div>
+    ${est ? `<button class="hero-note" type="button" data-act="amounts" data-period="${period}">${est} kalemin tutarı geçen aydan tahmini · <b>Tutarları gir</b></button>` : ""}
   </div>`;
+}
+
+function renewalsHTML(){
+  const due = S.items.map(it => ({it, key: renewalDue(it)})).filter(x => x.key);
+  if(!due.length) return "";
+  return `<section class="section"><div class="sec-head"><h2>Yenilemeler <span class="count">${due.length}</span></h2></div>
+    <div class="list">${due.map(({it, key}) => {
+      const [y,m] = key.split("-").map(Number); const c = catOf(it);
+      const now = iso(todayDate()).slice(0,7) === key;
+      return `<div class="item renew" data-id="${esc(it.id)}">
+        <button class="main" type="button" data-act="renew" data-key="${key}">
+          <span class="name">${esc(it.name)}</span>
+          <span class="meta"><span class="rel soon">${now ? "Bu ay yenileniyor" : "Gelecek ay yenileniyor"}</span><span>·</span><span>${ML[m-1]} ${y}</span><span class="tag" style="--h:${c.h}">${esc(c.label)}</span></span>
+        </button>
+        <div class="amt num">${tl(priceAt(it, key))}<small>Güncelle ›</small></div>
+      </div>`;
+    }).join("")}</div></section>`;
 }
 
 function viewAjanda(){
@@ -464,10 +596,10 @@ function viewAjanda(){
   const today = all.filter(o => o.date === t);
   const week = all.filter(o => { const d = daysBetween(t,o.date); return d>=1 && d<=7; });
   const soon = all.filter(o => { const d = daysBetween(t,o.date); return d>=8 && d<=30 && !o.paid; });
-  const lateSum = late.reduce((s,o)=>s+(o.it.amount||0),0);
   let h = heroHTML(cp);
-  if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tl(lateSum)}</span></button>`;
+  if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tl(sum(late))}</span></button>`;
   h += sectionHTML("Gecikenler", late, {cls:"sec-late"});
+  h += renewalsHTML();
   h += sectionHTML("Bugün", today, {showEmpty:true, hideDate:true, emptyText:"Bugün vadesi gelen ödeme yok."});
   h += sectionHTML("Önümüzdeki 7 gün", week, {showEmpty:true, emptyText:"Bu hafta başka ödeme yok."});
   h += sectionHTML("8–30 gün içinde", soon);
@@ -477,16 +609,18 @@ function viewAjanda(){
 function viewAy(){
   const p = S.cursor || curPeriod();
   const [y,m] = p.split("-").map(Number);
-  let occ = occurrences(p);
+  const occ = occurrences(p);
   const f = S.monthFilter;
   const shown = occ.filter(o => f==="all" || (f==="open" ? !o.paid : !!o.paid));
   const t = iso(todayDate());
+  const varCount = occ.filter(o => !o.paid && kindOf(o.it) === "variable").length;
   let h = `<div class="month-nav">
     <button class="icon-btn" type="button" data-act="prev" aria-label="Önceki ay">${ICON.left}</button>
     <h2>${ML[m-1]} ${y}</h2>
     <button class="icon-btn" type="button" data-act="next" aria-label="Sonraki ay">${ICON.right}</button>
   </div>`;
   h += heroHTML(p);
+  if(varCount) h += `<button class="btn primary wide" type="button" data-act="amounts" data-period="${p}">Bu ayın tutarlarını gir · ${varCount} değişken kalem</button>`;
   h += `<div class="seg" role="group" aria-label="Filtre">
     <button type="button" data-filter="all" aria-pressed="${f==="all"}">Tümü · ${occ.length}</button>
     <button type="button" data-filter="open" aria-pressed="${f==="open"}">Bekleyen · ${occ.filter(o=>!o.paid).length}</button>
@@ -496,8 +630,8 @@ function viewAy(){
   const groups = new Map();
   for(const o of shown){ if(!groups.has(o.date)) groups.set(o.date, []); groups.get(o.date).push(o); }
   for(const [date, list] of groups){
-    const daySum = list.reduce((s,o)=>s+(o.paid&&o.paid.amount!=null?o.paid.amount:(o.it.amount||0)),0);
-    h += `<section class="section"><div class="day-head${date===t?" today":""}"><span>${esc(fmtHead.format(parseISO(date)))}${date===t?" · Bugün":""}</span><span class="num">${tl(daySum)}</span></div>
+    const est = estCount(list);
+    h += `<section class="section"><div class="day-head${date===t?" today":""}"><span>${esc(fmtHead.format(parseISO(date)))}${date===t?" · Bugün":""}</span><span class="num">${est?"~":""}${tl(sum(list))}</span></div>
       <div class="list">${list.map(o => rowHTML(o,{hideDate:true})).join("")}</div></section>`;
   }
   return h;
@@ -505,29 +639,35 @@ function viewAy(){
 
 function viewKalemler(){
   const q = S.q.trim().toLocaleLowerCase("tr");
-  const used = new Set(S.items.map(i => i.cat || "diger"));
-  let list = S.items.filter(i => (S.cat==="all" || (i.cat||"diger")===S.cat) && (!q || (i.name+" "+(i.note||"")).toLocaleLowerCase("tr").includes(q)));
+  const cp = curPeriod();
+  let list = S.items.filter(i => (S.cat==="all" || (i.cat||"")===S.cat) && (!q || (i.name+" "+(i.note||"")).toLocaleLowerCase("tr").includes(q)));
   list.sort((a,b) => (a.once?1:0)-(b.once?1:0) || (a.once||"").localeCompare(b.once||"") || (a.day||0)-(b.day||0) || a.name.localeCompare(b.name,"tr"));
-  const monthly = S.items.filter(i => !i.once && (!i.months || !i.months.length || i.months.length===12) && (!i.end || i.end >= curPeriod()));
-  const monthlySum = monthly.reduce((s,i)=>s+(i.amount||0),0);
+  const occ = occurrences(cp);
+  const fixedN = S.items.filter(i => !i.once && kindOf(i) === "fixed").length;
+  const varN = S.items.filter(i => !i.once && kindOf(i) === "variable").length;
+  const counts = {}; S.items.forEach(i => { counts[i.cat||""] = (counts[i.cat||""]||0) + 1; });
   let h = `<label class="search" for="q">${ICON.search}<input id="q" type="search" placeholder="Kalem veya not ara" value="${esc(S.q)}" autocomplete="off"></label>
   <div class="chips" role="group" aria-label="Kategori">
     <button class="chip" type="button" data-cat="all" aria-pressed="${S.cat==="all"}">Tümü · ${S.items.length}</button>
-    ${Object.entries(CATS).filter(([k])=>used.has(k)).map(([k,c]) => `<button class="chip" type="button" data-cat="${k}" aria-pressed="${S.cat===k}">${esc(c.label)} · ${S.items.filter(i=>(i.cat||"diger")===k).length}</button>`).join("")}
+    ${S.cats.filter(c => counts[c.id]).map(c => `<button class="chip" type="button" data-cat="${esc(c.id)}" aria-pressed="${S.cat===c.id}">${esc(c.label)} · ${counts[c.id]}</button>`).join("")}
+    ${counts[""] ? `<button class="chip" type="button" data-cat="" aria-pressed="${S.cat===""}">Kategorisiz · ${counts[""]}</button>` : ""}
+    <button class="chip chip-edit" type="button" data-act="cats">Kategorileri düzenle</button>
   </div>
   <div class="stat-row">
-    <div class="stat"><span>Her ay tekrarlayan</span><b class="num">${monthly.length} kalem</b></div>
-    <div class="stat"><span>Aylık sabit toplam</span><b class="num">${tl(monthlySum)}</b></div>
+    <div class="stat"><span>Sabit · değişken</span><b class="num">${fixedN} · ${varN} kalem</b></div>
+    <div class="stat"><span>${ML[Number(cp.slice(5))-1]} toplamı</span><b class="num">${estCount(occ)?"~":""}${tl(sum(occ))}</b></div>
   </div>`;
   if(!list.length){ h += `<div class="state"><h2>Sonuç yok</h2>Aramayı veya kategoriyi değiştirin.</div>`; return h; }
   h += `<section class="section"><div class="list">` + list.map(i => {
-    const c = catOf(i);
+    const c = catOf(i), k = kindOf(i);
+    const a = i.once ? {v: i.amount, est:false} : amountFor(i, cp, null);
+    const extra = i.once ? "" : `<span>${k === "fixed" ? "Sabit" : "Değişken"}${i.renewMonth && k === "fixed" ? " · yenileme " + ML[i.renewMonth-1] : ""}</span>`;
     return `<div class="item" data-id="${esc(i.id)}">
       <button class="main" type="button" data-act="edit">
         <span class="name">${esc(i.name)}</span>
-        <span class="meta"><span>${esc(freqLabel(i))}</span><span class="tag" style="--h:${c.h}">${esc(c.label)}</span>${i.note?ICON.note:""}</span>
+        <span class="meta"><span>${esc(freqLabel(i))}</span>${extra}<span class="tag" style="--h:${c.h}">${esc(c.label)}</span>${i.note?ICON.note:""}</span>
       </button>
-      <div class="amt num">${i.amount==null?'<small>Tutar yok</small>':tl(i.amount)}</div>
+      <div class="amt num">${amtHTML(a.v, a.est)}</div>
     </div>`;
   }).join("") + `</div></section>`;
   return h;
@@ -643,9 +783,9 @@ function quickToggle(id, period){
     setPaid(period, id, null);
     toast(`${o.it.name} bekleyenlere alındı`, "Geri al", () => setPaid(period, id, prev));
   } else {
-    if(o.it.amount == null){ openDetail(id, period, true); return; }
-    const rec = {at: iso(todayDate()), amount: o.it.amount};
-    setPaid(period, id, rec);
+    // amount unknown or only an estimate: ask for the real figure first
+    if(o.amt == null || o.est){ openDetail(id, period, true); return; }
+    setPaid(period, id, {at: iso(todayDate()), amount: o.amt});
     toast(`${o.it.name} ödendi`, "Geri al", () => setPaid(period, id, null));
   }
 }
@@ -656,7 +796,7 @@ document.addEventListener("click", e => {
   const el = e.target.closest("[data-act],[data-filter],[data-cat]");
   if(!el || el.closest(".overlay")) return;
   if(el.dataset.filter){ S.monthFilter = el.dataset.filter; render(); return; }
-  if(el.dataset.cat){ S.cat = el.dataset.cat; render(); return; }
+  if(el.dataset.cat !== undefined && !el.dataset.act){ S.cat = el.dataset.cat; render(); return; }
   const act = el.dataset.act;
   const row = el.closest(".item");
   if(act === "toggle") quickToggle(row.dataset.id, row.dataset.period);
@@ -665,6 +805,9 @@ document.addEventListener("click", e => {
   else if(act === "prev"){ S.cursor = addMonths(S.cursor||curPeriod(), -1); render(); }
   else if(act === "next"){ S.cursor = addMonths(S.cursor||curPeriod(), 1); render(); }
   else if(act === "backup") openMenu();
+  else if(act === "amounts") openAmounts(el.dataset.period || curPeriod());
+  else if(act === "renew") openRenewal(row.dataset.id, el.dataset.key);
+  else if(act === "cats") openCats();
   else if(act === "copy") copyValue(el.dataset.v);
   else if(act === "info-edit") openInfoEditor(el.dataset.id);
   else if(act === "jump-late"){ const s = document.querySelector(".sec-late"); if(s) s.scrollIntoView({behavior:"smooth", block:"start"}); }
@@ -700,14 +843,15 @@ document.addEventListener("keydown", e => { if(e.key === "Escape") closeSheet();
 
 function openDetail(id, period, focusAmount){
   const o = findOcc(id, period); if(!o) return;
-  const it = o.it, c = catOf(it);
+  const it = o.it, c = catOf(it), k = kindOf(it);
+  const entered = enteredAmount(it, period);
   const html = `
     <h3>${esc(it.name)}</h3>
-    <p class="lead"><span class="tag" style="--h:${c.h}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))}</p>
+    <p class="lead"><span class="tag" style="--h:${c.h}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))} · ${k === "fixed" ? "Sabit tutar" : "Her ay değişir"}</p>
     <dl class="kv">
       <dt>Vade</dt><dd>${esc(fmtHead.format(parseISO(o.date)))}</dd>
       <dt>Durum</dt><dd style="color:${o.paid?"var(--ok)":(o.date<iso(todayDate())?"var(--late)":"inherit")}">${o.paid ? "Ödendi" : esc(relLabel(o.date))}</dd>
-      <dt>Planlanan tutar</dt><dd class="num">${tl(it.amount, true)}</dd>
+      <dt>Bu ayın tutarı</dt><dd class="num">${o.amt == null ? "—" : (o.est ? "~" + tl(o.amt, true) + " (tahmini)" : tl(o.amt, true))}</dd>
     </dl>
     ${it.note ? `<div class="notebox">${esc(it.note)}</div>` : ""}
     ${o.paid ? `
@@ -717,27 +861,109 @@ function openDetail(id, period, focusAmount){
         <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
       </div>` : `
       <div class="two">
-        <div class="field"><label for="pAmt">Ödenen tutar (₺)</label><input id="pAmt" inputmode="decimal" placeholder="Örn. 92.500" value="${esc(amountInput(it.amount))}" ${focusAmount?"autofocus":""}></div>
+        <div class="field"><label for="pAmt">${k === "variable" ? "Bu ayın tutarı (₺)" : "Ödenen tutar (₺)"}</label><input id="pAmt" inputmode="decimal" placeholder="${o.amt!=null?"~"+esc(amountInput(o.amt)):"Örn. 92.500"}" value="${esc(amountInput(k === "variable" ? entered : o.amt))}" ${focusAmount?"autofocus":""}></div>
         <div class="field"><label for="pAt">Ödeme tarihi</label><input id="pAt" type="date" value="${iso(todayDate())}"></div>
       </div>
       <p class="err" id="pErr"></p>
       <div class="btns">
         <button class="btn ok" type="button" id="pay">Ödendi olarak işaretle</button>
+        ${k === "variable" ? `<button class="btn" type="button" id="saveAmt">Sadece tutarı kaydet (henüz ödenmedi)</button>` : ""}
         <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
       </div>`}`;
   openSheet(html, sh => {
     sh.querySelector("#edit").onclick = () => openEditor(id);
     const un = sh.querySelector("#unpay");
     if(un) un.onclick = () => { const prev = o.paid; closeSheet(); setPaid(period, id, null); toast(`${it.name} bekleyenlere alındı`, "Geri al", () => setPaid(period, id, prev)); };
+    const readAmt = () => {
+      const raw = sh.querySelector("#pAmt").value;
+      const v = raw.trim() === "" ? null : parseAmount(raw);
+      if(Number.isNaN(v)){ sh.querySelector("#pErr").textContent = "Tutarı rakamla yazın, örneğin 92.500,50."; return undefined; }
+      return v;
+    };
     const pay = sh.querySelector("#pay");
     if(pay) pay.onclick = () => {
-          const raw = sh.querySelector("#pAmt").value;
-      const amt = parseAmount(raw);
-      if(Number.isNaN(amt)){ sh.querySelector("#pErr").textContent = "Tutarı rakamla yazın, örneğin 92.500,50."; return; }
+      let v = readAmt(); if(v === undefined) return;
+      if(v == null) v = o.amt;  // left empty: use the shown figure
       const at = sh.querySelector("#pAt").value || iso(todayDate());
+      if(k === "variable" && v != null) setAmounts(period, {[id]: v});
       closeSheet();
-      setPaid(period, id, {at, amount: amt});
+      setPaid(period, id, {at, amount: v ?? null});
       toast(`${it.name} ödendi`, "Geri al", () => setPaid(period, id, null));
+    };
+    const sa = sh.querySelector("#saveAmt");
+    if(sa) sa.onclick = () => {
+      const v = readAmt(); if(v === undefined) return;
+      if(!setAmounts(period, {[id]: v})) return;
+      closeSheet(); render(); toast(v == null ? "Tutar silindi, tahmin kullanılacak" : `${it.name}: ${tl(v, true)} kaydedildi`);
+    };
+  });
+}
+
+function openAmounts(period){
+  const [y,m] = period.split("-").map(Number);
+  const list = occurrences(period).filter(o => !o.paid && kindOf(o.it) === "variable");
+  if(!list.length){ toast("Bu ay girilecek değişken tutar yok"); return; }
+  const html = `
+    <h3>${ML[m-1]} ${y} tutarları</h3>
+    <p class="lead">Ekstre veya tahakkuk gelen kalemlerin tutarını yazın. Boş bıraktıklarınız geçen aydan tahmini görünmeye devam eder.</p>
+    <div id="amtList">${list.map(o => {
+      const e = enteredAmount(o.it, period);
+      const est = lastKnown(o.it, period);
+      return `<div class="amt-row"><label for="a_${esc(o.it.id)}"><b>${esc(o.it.name)}</b><span>${esc(fmtDay.format(parseISO(o.date)))} · ${esc(catOf(o.it).label)}</span></label>
+        <input id="a_${esc(o.it.id)}" data-id="${esc(o.it.id)}" inputmode="decimal" placeholder="${est!=null?"~"+esc(amountInput(est)):"Tutar"}" value="${esc(amountInput(e))}"></div>`;
+    }).join("")}</div>
+    <p class="err" id="aErr"></p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="aSave">Tutarları kaydet</button>
+      <button class="btn ghost" type="button" id="aCancel">Vazgeç</button>
+    </div>`;
+  openSheet(html, sh => {
+    sh.querySelector("#aCancel").onclick = closeSheet;
+    sh.querySelector("#aSave").onclick = () => {
+      const map = {}; let bad = null, n = 0;
+      sh.querySelectorAll("#amtList input").forEach(inp => {
+        const raw = inp.value.trim();
+        const v = raw === "" ? null : parseAmount(raw);
+        if(Number.isNaN(v)){ bad = bad || inp; return; }
+        map[inp.dataset.id] = v; if(v != null) n++;
+      });
+      if(bad){ sh.querySelector("#aErr").textContent = "Bir tutar rakam değil, kontrol edin."; bad.focus(); return; }
+      if(!setAmounts(period, map)) { sh.querySelector("#aErr").textContent = dbErr(); return; }
+      closeSheet(); render(); toast(`${n} tutar kaydedildi`);
+    };
+  });
+}
+
+function openRenewal(id, key){
+  const it = S.items.find(i => i.id === id); if(!it) return;
+  const [y,m] = key.split("-").map(Number);
+  const cur = priceAt(it, key);
+  const html = `
+    <h3>${esc(it.name)}</h3>
+    <p class="lead">${ML[m-1]} ${y} yenilemesi. Şu anki tutar <b>${tl(cur, true)}</b>. Yeni tutar, seçtiğiniz aydan itibaren geçerli olur; önceki aylar değişmez.</p>
+    <div class="two">
+      <div class="field"><label for="rAmt">Yeni tutar (₺)</label><input id="rAmt" inputmode="decimal" value="${esc(amountInput(cur))}" autofocus></div>
+      <div class="field"><label for="rFrom">Hangi aydan itibaren</label><input id="rFrom" type="month" value="${key}"></div>
+    </div>
+    <p class="err" id="rErr"></p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="rSave">Yeni tutarı kaydet</button>
+      <button class="btn" type="button" id="rSame">Tutar değişmedi</button>
+      <button class="btn ghost" type="button" id="rCancel">Vazgeç</button>
+    </div>`;
+  openSheet(html, sh => {
+    sh.querySelector("#rCancel").onclick = closeSheet;
+    sh.querySelector("#rSame").onclick = () => {
+      updateItem(id, {renewDone: [...(it.renewDone||[]), key]});
+      closeSheet(); render(); toast(`${it.name}: tutar aynı kaldı`);
+    };
+    sh.querySelector("#rSave").onclick = () => {
+      const v = parseAmount(sh.querySelector("#rAmt").value);
+      const from = sh.querySelector("#rFrom").value || key;
+      if(v == null || Number.isNaN(v)){ sh.querySelector("#rErr").textContent = "Yeni tutarı rakamla yazın."; return; }
+      const prices = (it.prices || []).filter(p => p.from !== from).concat({from, amount: v});
+      updateItem(id, {prices, amount: v, renewDone: [...(it.renewDone||[]), key]});
+      closeSheet(); render(); toast(`${it.name}: ${tl(v, true)}, ${ML[Number(from.slice(5))-1]} ${from.slice(0,4)}'ten itibaren`);
     };
   });
 }
@@ -748,14 +974,21 @@ function openEditor(id){
   const cp = curPeriod();
   const mode = it ? (it.once ? "once" : ((it.months && it.months.length && it.months.length < 12) ? "months" : "monthly")) : "monthly";
   let months = it && it.months && it.months.length && it.months.length < 12 ? [...it.months] : [Number(cp.slice(5))];
+  const startCat = it ? (it.cat || "") : (S.cat !== "all" && S.cats.some(c => c.id === S.cat) ? S.cat : (S.cats[0] ? S.cats[0].id : ""));
+  const startKind = it ? kindOf(it) : ((S.cats.find(c => c.id === startCat) || NO_CAT).kind);
+  const curAmount = it ? (kindOf(it) === "fixed" ? priceAt(it, cp) : it.amount) : null;
   const html = `
     <h3>${it ? "Kalemi düzenle" : "Yeni ödeme"}</h3>
-    <p class="lead">${it ? "Değişiklikler bu ve sonraki aylara yansır; geçmiş ödendi kayıtları korunur." : "Tekrarlayan veya tek seferlik bir ödeme ekleyin."}</p>
+    <p class="lead">${it ? "Geçmiş ödendi kayıtları korunur." : "Tekrarlayan veya tek seferlik bir ödeme ekleyin."}</p>
     <form id="f" novalidate>
       <div class="field"><label for="fName">Ödeme adı</label><input id="fName" required value="${esc(it?it.name:"")}" placeholder="Örn. Yıldız Kira" ${it?"":"autofocus"}></div>
       <div class="two">
-        <div class="field"><label for="fAmt">Tutar (₺)</label><input id="fAmt" inputmode="decimal" value="${esc(it?amountInput(it.amount):"")}" placeholder="Boş bırakılabilir"></div>
-        <div class="field"><label for="fCat">Kategori</label><select id="fCat">${Object.entries(CATS).map(([k,c])=>`<option value="${k}" ${(it?it.cat:"diger")===k?"selected":""}>${esc(c.label)}</option>`).join("")}</select></div>
+        <div class="field"><label for="fCat">Kategori</label><select id="fCat">${S.cats.map(c=>`<option value="${esc(c.id)}" ${startCat===c.id?"selected":""}>${esc(c.label)}</option>`).join("")}${S.cats.some(c=>c.id===startCat)?"":`<option value="" selected>Kategorisiz</option>`}</select></div>
+        <div class="field" id="kindWrap"><label for="fKind">Tutar</label><select id="fKind"><option value="fixed" ${startKind==="fixed"?"selected":""}>Sabit tutar</option><option value="variable" ${startKind==="variable"?"selected":""}>Her ay değişir</option></select></div>
+      </div>
+      <div class="two">
+        <div class="field"><label for="fAmt" id="fAmtL">Tutar (₺)</label><input id="fAmt" inputmode="decimal" value="${esc(amountInput(curAmount))}" placeholder="Boş bırakılabilir"></div>
+        <div class="field" id="fromWrap"><label for="fFrom">Yeni tutar hangi aydan?</label><input id="fFrom" type="month" value="${cp}"></div>
       </div>
       <div class="field"><label for="fMode">Ne sıklıkla?</label>
         <select id="fMode">
@@ -767,12 +1000,15 @@ function openEditor(id){
         <div class="field" id="mWrap"><label>Hangi aylarda?</label><div class="mchips" id="mchips">${MS.map((m,i)=>`<button type="button" data-m="${i+1}" aria-pressed="${months.includes(i+1)}">${m}</button>`).join("")}</div></div>
         <div class="two">
           <div class="field"><label for="fDay">Ayın kaçında?</label><input id="fDay" type="number" inputmode="numeric" min="1" max="31" value="${it&&!it.once?it.day:""}" placeholder="1–31"></div>
-          <div class="field"><label for="fStart">Başlangıç ayı</label><input id="fStart" type="month" value="${esc(it&&it.start?it.start:cp)}"></div>
+          <div class="field" id="renewWrap"><label for="fRenew">Yenileme ayı</label><select id="fRenew"><option value="">Yok</option>${ML.map((n,i)=>`<option value="${i+1}" ${it&&it.renewMonth===i+1?"selected":""}>${n}</option>`).join("")}</select></div>
         </div>
-        <div class="field"><label for="fEnd">Son ay (isteğe bağlı)</label><input id="fEnd" type="month" value="${esc(it&&it.end?it.end:"")}"></div>
+        <div class="two">
+          <div class="field"><label for="fStart">Başlangıç ayı</label><input id="fStart" type="month" value="${esc(it&&it.start?it.start:cp)}"></div>
+          <div class="field"><label for="fEnd">Son ay (isteğe bağlı)</label><input id="fEnd" type="month" value="${esc(it&&it.end?it.end:"")}"></div>
+        </div>
       </div>
       <div class="field" id="onceWrap"><label for="fOnce">Ödeme tarihi</label><input id="fOnce" type="date" value="${esc(it&&it.once?it.once:"")}"></div>
-      <div class="field"><label for="fNote">Not</label><textarea id="fNote" placeholder="Hesap no, zam bilgisi, hatırlatma…">${esc(it?it.note||"":"")}</textarea></div>
+      <div class="field"><label for="fNote">Not</label><textarea id="fNote" placeholder="İsteğe bağlı">${esc(it?it.note||"":"")}</textarea></div>
       <p class="err" id="fErr"></p>
       <div class="btns">
         <button class="btn primary" type="submit" id="save">${it ? "Değişiklikleri kaydet" : "Ödemeyi ekle"}</button>
@@ -781,14 +1017,22 @@ function openEditor(id){
       </div>
     </form>`;
   openSheet(html, sh => {
-    const modeSel = sh.querySelector("#fMode");
+    const modeSel = sh.querySelector("#fMode"), kindSel = sh.querySelector("#fKind"), amtIn = sh.querySelector("#fAmt");
+    let kindTouched = !!it;
     const sync = () => {
-      const m = modeSel.value;
+      const m = modeSel.value, fixed = kindSel.value === "fixed" || m === "once";
       sh.querySelector("#recur").style.display = m === "once" ? "none" : "";
       sh.querySelector("#mWrap").style.display = m === "months" ? "" : "none";
       sh.querySelector("#onceWrap").style.display = m === "once" ? "" : "none";
+      sh.querySelector("#kindWrap").style.display = m === "once" ? "none" : "";
+      sh.querySelector("#renewWrap").style.visibility = fixed && m !== "once" ? "visible" : "hidden";
+      sh.querySelector("#fAmtL").textContent = fixed ? "Tutar (₺)" : "Tahmini tutar (₺)";
+      const changed = it && fixed && kindOf(it) === "fixed" && m !== "once" && parseAmount(amtIn.value) !== curAmount;
+      sh.querySelector("#fromWrap").style.visibility = changed ? "visible" : "hidden";
     };
-    modeSel.onchange = sync; sync();
+    modeSel.onchange = sync; kindSel.onchange = () => { kindTouched = true; sync(); }; amtIn.oninput = sync;
+    sh.querySelector("#fCat").onchange = e => { if(!kindTouched){ const c = S.cats.find(x => x.id === e.target.value); if(c) kindSel.value = c.kind; sync(); } };
+    sync();
     sh.querySelector("#mchips").onclick = e => {
       const b = e.target.closest("button[data-m]"); if(!b) return;
       const m = Number(b.dataset.m);
@@ -801,21 +1045,24 @@ function openEditor(id){
       if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
       del.disabled = true;
       try { await deleteItem(id); closeSheet(); toast(`${it.name} silindi`); }
-      catch(err){ sh.querySelector("#fErr").textContent = dbErr(err); del.disabled = false; }
+      catch(err){ sh.querySelector("#fErr").textContent = dbErr(); del.disabled = false; }
     };
     sh.querySelector("#f").onsubmit = async ev => {
       ev.preventDefault();
       const err = sh.querySelector("#fErr");
       const name = sh.querySelector("#fName").value.trim();
-      const amount = parseAmount(sh.querySelector("#fAmt").value);
+      const amount = parseAmount(amtIn.value);
       const mode = modeSel.value;
       if(!name){ err.textContent = "Ödemeye bir ad verin."; return; }
       if(Number.isNaN(amount)){ err.textContent = "Tutarı rakamla yazın, örneğin 92.500,50."; return; }
-      const data = { name, amount, cat: sh.querySelector("#fCat").value, note: sh.querySelector("#fNote").value.trim(), created: it && it.created ? it.created : Date.now() };
+      const base = it ? {...it} : {created: Date.now()};
+      delete base.id;
+      const data = {...base, name, cat: sh.querySelector("#fCat").value, note: sh.querySelector("#fNote").value.trim()};
       if(mode === "once"){
         const d = sh.querySelector("#fOnce").value;
         if(!d){ err.textContent = "Ödeme tarihini seçin."; return; }
-        Object.assign(data, {once: d, day: Number(d.slice(8)), months: [], start: d.slice(0,7)});
+        Object.assign(data, {once: d, day: Number(d.slice(8)), months: [], start: d.slice(0,7), kind: "fixed", amount, prices: amount != null ? [{from: d.slice(0,7), amount}] : []});
+        delete data.end; delete data.renewMonth;
       } else {
         const day = Number(sh.querySelector("#fDay").value);
         if(!Number.isInteger(day) || day < 1 || day > 31){ err.textContent = "Ayın gününü 1 ile 31 arasında yazın."; return; }
@@ -823,18 +1070,104 @@ function openEditor(id){
         const start = sh.querySelector("#fStart").value || cp;
         const end = sh.querySelector("#fEnd").value || null;
         if(end && end < start){ err.textContent = "Son ay, başlangıç ayından önce olamaz."; return; }
-        Object.assign(data, {once: null, day, months: mode === "months" ? months : ALL, start});
-        if(end) data.end = end;
+        const kind = kindSel.value;
+        Object.assign(data, {once: null, day, months: mode === "months" ? months : ALL, start, kind});
+        if(end) data.end = end; else delete data.end;
+        if(kind === "fixed"){
+          const rm = Number(sh.querySelector("#fRenew").value) || null;
+          if(rm) data.renewMonth = rm; else delete data.renewMonth;
+          let prices = Array.isArray(data.prices) ? [...data.prices] : [];
+          if(!it || kindOf(it) !== "fixed" || !prices.length){
+            prices = amount != null ? [{from: start, amount}] : [];
+          } else if(amount !== curAmount){
+            const from = sh.querySelector("#fFrom").value || cp;
+            prices = prices.filter(p => p.from !== from).concat(amount != null ? [{from, amount}] : []);
+          }
+          data.prices = prices; data.amount = amount;
+        } else {
+          data.amount = amount; delete data.prices; delete data.renewMonth;
+        }
       }
       const btn = sh.querySelector("#save"); btn.disabled = true;
       try { await saveItem(id, data); closeSheet(); toast(it ? "Kaydedildi" : `${name} eklendi`); }
-      catch(e2){ err.textContent = dbErr(e2); btn.disabled = false; }
+      catch(e2){ err.textContent = dbErr(); btn.disabled = false; }
+    };
+  });
+}
+
+function openCats(){
+  let rows = S.cats.map(c => ({...c}));
+  const moves = {};  // deleted category id -> target id
+  const countOf = id => S.items.filter(i => (i.cat||"") === id && !(id in moves)).length;
+  const draw = sh => {
+    sh.querySelector("#catList").innerHTML = rows.map((c, i) => `
+      <div class="cat-row" data-i="${i}">
+        <button type="button" class="hue" data-act2="hue" style="--h:${c.h}" aria-label="Rengi değiştir"></button>
+        <input data-f="label" value="${esc(c.label)}" aria-label="Kategori adı" placeholder="Kategori adı">
+        <select data-f="kind" aria-label="Varsayılan tutar türü"><option value="fixed" ${c.kind==="fixed"?"selected":""}>Sabit</option><option value="variable" ${c.kind==="variable"?"selected":""}>Değişken</option></select>
+        <button type="button" class="x" data-act2="del" aria-label="Kategoriyi sil">×</button>
+        ${c._deleting ? `<div class="cat-move">${countOf(c.id)} kalem bu kategoride. Şuraya taşı:
+          <select data-f="target">${rows.filter(x => x.id !== c.id && !x._deleting).map(x => `<option value="${esc(x.id)}">${esc(x.label)}</option>`).join("")}</select>
+          <button type="button" class="btn danger" data-act2="confirm">Taşı ve sil</button></div>` : ""}
+      </div>`).join("");
+  };
+  const html = `
+    <h3>Kategoriler</h3>
+    <p class="lead">Rengine dokunarak değiştirin. Sabit/Değişken, o kategoride yeni eklenen kalemlerin varsayılan tutar türüdür.</p>
+    <div id="catList"></div>
+    <button class="btn ghost" type="button" id="cAdd" style="padding:10px;width:100%">+ Kategori ekle</button>
+    <p class="err" id="cErr"></p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="cSave">Kaydet</button>
+      <button class="btn ghost" type="button" id="cCancel">Vazgeç</button>
+    </div>`;
+  openSheet(html, sh => {
+    draw(sh);
+    const list = sh.querySelector("#catList");
+    const syncInputs = () => list.querySelectorAll(".cat-row").forEach(r => {
+      const c = rows[Number(r.dataset.i)];
+      c.label = r.querySelector('[data-f="label"]').value;
+      c.kind = r.querySelector('[data-f="kind"]').value;
+    });
+    list.onclick = e => {
+      const b = e.target.closest("[data-act2]"); if(!b) return;
+      syncInputs();
+      const i = Number(b.closest(".cat-row").dataset.i), c = rows[i];
+      if(b.dataset.act2 === "hue"){ c.h = HUES[(HUES.indexOf(c.h) + 1) % HUES.length]; }
+      else if(b.dataset.act2 === "del"){
+        if(rows.filter(x => !x._deleting).length <= 1){ sh.querySelector("#cErr").textContent = "En az bir kategori kalmalı."; return; }
+        if(countOf(c.id) === 0){ rows.splice(i, 1); }
+        else c._deleting = !c._deleting;
+      }
+      else if(b.dataset.act2 === "confirm"){
+        moves[c.id] = b.parentElement.querySelector('[data-f="target"]').value;
+        rows.splice(i, 1);
+      }
+      draw(sh);
+    };
+    sh.querySelector("#cAdd").onclick = () => {
+      syncInputs();
+      const used = new Set(rows.map(r => r.h));
+      rows.push({id: "c" + Date.now().toString(36), label: "", h: HUES.find(h => !used.has(h)) ?? 210, kind: "variable"});
+      draw(sh); const ins = list.querySelectorAll('[data-f="label"]'); ins[ins.length-1].focus();
+    };
+    sh.querySelector("#cCancel").onclick = closeSheet;
+    sh.querySelector("#cSave").onclick = () => {
+      syncInputs();
+      if(rows.some(r => r._deleting)){ sh.querySelector("#cErr").textContent = "Silmek istediğiniz kategorinin kalemlerini nereye taşıyacağınızı seçip \"Taşı ve sil\"e dokunun."; return; }
+      if(rows.some(r => !r.label.trim())){ sh.querySelector("#cErr").textContent = "Her kategoriye bir ad verin."; return; }
+      const resolve = id => { let t = id, n = 0; while(t in moves && n++ < 20) t = moves[t]; return t; };
+      S.cats = rows.map(({_deleting, ...c}) => ({...c, label: c.label.trim()}));
+      S.items = S.items.map(i => (i.cat in moves) ? {...i, cat: resolve(i.cat)} : i);
+      if(S.cat !== "all" && !S.cats.some(c => c.id === S.cat)) S.cat = "all";
+      if(!persist()){ sh.querySelector("#cErr").textContent = dbErr(); return; }
+      closeSheet(); render(); toast("Kategoriler kaydedildi");
     };
   });
 }
 
 function backupData(){
-  return {app:"odeme-takvimi", version:1, exported:new Date().toISOString(), items:S.items, months:S.months, infos:S.infos};
+  return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos};
 }
 function markBackedUp(){ S.lastBackup = new Date().toISOString(); persist(); render(); }
 function backupFile(){
@@ -853,6 +1186,7 @@ function openMenu(){
       <button class="btn ${canShare?"":"primary"}" type="button" id="dl">Yedek dosyasını indir</button>
       <button class="btn ghost" type="button" id="copy">Yedeği panoya kopyala</button>
     </div>
+    <div class="btns" style="margin-top:14px"><button class="btn" type="button" id="toCats">Kategorileri düzenle</button></div>
     <div class="field" style="margin-top:18px"><label for="impFile">Yedekten geri yükle</label><input id="impFile" type="file" accept=".json,.txt,application/json,text/plain"></div>
     <div class="field"><label for="impTxt">veya yedek metnini yapıştırın</label>
       <textarea id="impTxt" placeholder="Eski uygulamadaki ⋯ > Yedeği panoya kopyala ile aldığınız metin"></textarea></div>
@@ -864,6 +1198,7 @@ function openMenu(){
   openSheet(html, sh => {
     const msg = sh.querySelector("#mErr");
     sh.querySelector("#close").onclick = closeSheet;
+    sh.querySelector("#toCats").onclick = openCats;
     const share = sh.querySelector("#share");
     if(share) share.onclick = async () => {
       try { await navigator.share({files:[backupFile()], title:"Ödemeler yedeği"}); markBackedUp(); closeSheet(); toast("Yedek gönderildi"); }
@@ -905,14 +1240,14 @@ function openMenu(){
         imp.textContent = `Mevcut ${S.items.length} kalemin yerine ${items.length} kalem yüklensin mi? Onaylamak için tekrar dokunun`;
         return;
       }
-      const months = {};
-      for(const [p, v] of Object.entries(data.months || {})) if(/^\d{4}-\d{2}$/.test(p)) months[p] = {paid: (v && v.paid) || {}};
-      const prev = {items:S.items, months:S.months};
+      const mig = migrate({...data, items});
+      const months = mig.months;
+      const prev = {items:S.items, months:S.months, cats:S.cats};
       const prevInfos = S.infos;
-      S.items = items; S.months = months; S.failed = null;
+      S.items = mig.items; S.months = months; S.cats = mig.cats; S.failed = null;
       if(Array.isArray(data.infos)) S.infos = data.infos.filter(c => c && c.id && c.title);
-      if(!persist()){ S.items = prev.items; S.months = prev.months; S.infos = prevInfos; msg.textContent = dbErr(); return; }
-      closeSheet(); render(); toast(`${items.length} kalem yedekten yüklendi`);
+      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; msg.textContent = dbErr(); return; }
+      closeSheet(); render(); toast(`${mig.items.length} kalem yedekten yüklendi`);
     };
   });
 }
