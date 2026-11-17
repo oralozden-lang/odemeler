@@ -218,6 +218,11 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
 .banner.nag{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#FFF6E5;border-color:#F3D9A4;color:#7A4B07}
 .banner.nag b{flex:none;color:var(--accent);font-size:13.5px}
 @keyframes fade{from{opacity:0}}
+/* tab change by swipe: the new tab slides in from the side it came from */
+#view.from-r{animation:fromR .22s ease}
+#view.from-l{animation:fromL .22s ease}
+@keyframes fromR{from{transform:translateX(28px);opacity:.3}}
+@keyframes fromL{from{transform:translateX(-28px);opacity:.3}}
 @keyframes up{from{transform:translateY(24px);opacity:0}}
 @keyframes sh{to{background-position:-200% 0}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
@@ -960,6 +965,42 @@ function setTab(tab){
   render(); window.scrollTo(0,0);
 }
 window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if(["ajanda","ay","kalemler","bilgiler"].includes(h) && h!==S.tab){ S.tab=h; render(); } });
+
+/* ---------- swipe between tabs ---------- */
+// Left swipe: next tab, right swipe: previous one (no wrap-around). Only a clearly sideways, quick, long-enough
+// swipe counts, so scrolling a list never changes tabs. Swipes starting at the screen edges are left alone:
+// there Android's gesture navigation means "back", which would close the app.
+const TAB_ORDER = ["ajanda","ay","kalemler","bilgiler"];
+const SWIPE = {edge: 32, min: 70, ratio: 2, maxMs: 700};
+let swipeStart = null;
+// listened for on the whole page area (#app), so empty space below a short list also takes the swipe
+const swipeArea = $("#app");
+swipeArea.addEventListener("touchstart", e => {
+  swipeStart = null;
+  if(e.touches.length !== 1 || $(".overlay")) return;
+  if(e.target.closest("input, textarea, select, .fpanel")) return;
+  const t = e.touches[0];
+  if(t.clientX < SWIPE.edge || t.clientX > window.innerWidth - SWIPE.edge) return;
+  swipeStart = {x: t.clientX, y: t.clientY, at: Date.now()};
+}, {passive: true});
+swipeArea.addEventListener("touchmove", e => { if(e.touches.length !== 1) swipeStart = null; }, {passive: true});
+swipeArea.addEventListener("touchcancel", () => { swipeStart = null; }, {passive: true});
+swipeArea.addEventListener("touchend", e => {
+  const s = swipeStart; swipeStart = null;
+  if(!s || $(".overlay")) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - s.x, dy = t.clientY - s.y;
+  if(Date.now() - s.at > SWIPE.maxMs || Math.abs(dx) < SWIPE.min || Math.abs(dx) < SWIPE.ratio * Math.abs(dy)) return;
+  const sel = window.getSelection && String(window.getSelection()); if(sel) return;  // selecting text, not swiping
+  const next = TAB_ORDER[TAB_ORDER.indexOf(S.tab) + (dx < 0 ? 1 : -1)];
+  if(!next) return;
+  if(S.filterOpen) S.filterOpen = false;
+  setTab(next);
+  const v = $("#view");
+  v.classList.remove("from-r", "from-l"); void v.offsetWidth;  // restart the animation
+  v.classList.add(dx < 0 ? "from-r" : "from-l");
+}, {passive: true});
+$("#view").addEventListener("animationend", e => { if(e.target.id === "view") e.target.classList.remove("from-r", "from-l"); });
 
 /* ---------- sheets ---------- */
 // Each open sheet sits on its own history entry, so Android's back button closes the sheet instead of the app.
