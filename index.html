@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B3B44">
+<meta name="color-scheme" content="light only">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ödemeler</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="description" content="Yaklaşan ve geciken ödemeleri takip edin.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Light theme only, by request. Layout: phone-first single column; a petrol "ledger" hero for the month, then due-date sections; bottom tab bar. */
+:root{
+  --bg:#EDF1F3; --surface:#FFFFFF; --surface-2:#F5F7F9; --ink:#14212A; --muted:#5D6B77; --line:#DCE3E8;
+  --accent:#0B6E78; --accent-ink:#FFFFFF; --accent-soft:#DDF0F1;
+  --hero:#0B3B44; --hero-ink:#EAF6F7; --hero-muted:#9CC7CC; --hero-track:rgba(255,255,255,.14); --hero-fill:#5FD3C9;
+  --late:#C2410C; --late-soft:#FCE9DE; --ok:#15803D; --ok-soft:#DFF3E6; --warn:#B45309;
+  --cat-l:42%; --cat-s:58%; --cat-bg-l:93%;
+  --shadow:0 1px 2px rgba(20,33,42,.06),0 8px 24px rgba(20,33,42,.06);
+  --font-display:"Bricolage Grotesque", "Manrope", system-ui, sans-serif;
+  --font-body:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r:16px;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+.num{font-variant-numeric:tabular-nums}
+.app{max-width:620px;margin:0 auto;min-height:100%;padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 96px)}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 2px 14px}
+header.top h1{font-family:var(--font-display);font-size:26px;letter-spacing:-.01em;margin:0;line-height:1.1;text-wrap:balance}
+header.top .date{color:var(--muted);font-size:13px;font-weight:500;margin-top:2px}
+.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--ink)}
+.icon-btn svg{width:20px;height:20px}
+
+/* hero */
+.hero{background:var(--hero);color:var(--hero-ink);border-radius:22px;padding:18px 18px 16px;display:grid;gap:14px}
+.hero .row1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.hero .lbl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--hero-muted)}
+.hero .big{font-family:var(--font-display);font-size:32px;line-height:1.05;letter-spacing:-.01em}
+.hero .sub{font-size:13px;color:var(--hero-muted)}
+.bar{height:8px;border-radius:99px;background:var(--hero-track);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--hero-fill);border-radius:99px;transition:width .4s ease}
+.hero .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.hero .split div{display:grid;gap:2px}
+.hero .split b{font-size:16px;font-weight:700}
+.alert{display:flex;align-items:center;gap:10px;margin-top:12px;padding:12px 14px;border-radius:14px;background:var(--late-soft);color:var(--late);font-weight:600;font-size:14px;border:0;width:100%;text-align:left}
+.alert svg{width:18px;height:18px;flex:none}
+.alert span.grow{flex:1}
+
+/* sections */
+.section{margin-top:22px}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:0 4px 8px}
+.sec-head h2{font-family:var(--font-display);font-size:17px;margin:0;display:flex;align-items:center;gap:8px}
+.sec-head h2 .count{font-family:var(--font-body);font-size:12px;font-weight:700;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+.sec-head .sum{font-size:13px;color:var(--muted);font-weight:600}
+.sec-late h2{color:var(--late)}
+.list{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--line);overflow:hidden}
+.empty-line{padding:16px;color:var(--muted);font-size:14px}
+
+.item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--line);position:relative}
+.item:first-child{border-top:0}
+.item.late::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--late)}
+.check{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:transparent;display:grid;place-items:center;color:transparent;transition:background .15s,border-color .15s}
+.check svg{width:16px;height:16px}
+.check:hover{border-color:var(--accent)}
+.item.paid .check{background:var(--ok);border-color:var(--ok);color:#fff}
+.item .main{flex:1;min-width:0;background:none;border:0;padding:0;text-align:left;display:grid;gap:3px}
+.item .name{font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.item .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.item .meta .rel{font-weight:600}
+.item.late .meta .rel{color:var(--late)}
+.item .meta .soon{color:var(--warn)}
+.item .amt{flex:none;font-weight:700;font-size:15px;text-align:right;white-space:nowrap}
+.item .amt small{display:block;font-weight:500;font-size:11.5px;color:var(--muted)}
+.item.paid .name,.item.paid .amt{color:var(--muted)}
+.item.paid .name{text-decoration:line-through;text-decoration-thickness:1px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:99px;color:hsl(var(--h) var(--cat-s) var(--cat-l));background:hsl(var(--h) 60% var(--cat-bg-l))}
+.tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.note-ic{width:14px;height:14px;color:var(--muted)}
+
+/* month view */
+.month-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.month-nav h2{font-family:var(--font-display);font-size:22px;margin:0;text-align:center;flex:1}
+.seg{display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:4px;margin:14px 0 4px}
+.seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:8px 6px;font-size:13.5px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.day-head{display:flex;justify-content:space-between;padding:0 4px 6px;font-size:13px;font-weight:700;color:var(--muted)}
+.day-head.today{color:var(--accent)}
+
+/* items view */
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:0 12px;height:46px}
+.search svg{width:18px;height:18px;color:var(--muted);flex:none}
+.search input{flex:1;border:0;background:transparent;outline:0;height:100%;font-size:15px;min-width:0}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:12px 2px 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.stat-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.stat span{font-size:12px;color:var(--muted);font-weight:600}
+.stat b{display:block;font-size:18px;font-family:var(--font-display);margin-top:2px}
+
+/* bottom nav + fab */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px 12px calc(env(safe-area-inset-bottom) + 6px);z-index:20}
+nav.tabs .in{max-width:620px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+nav.tabs button{border:0;background:transparent;display:grid;justify-items:center;gap:2px;padding:6px 0;font-size:11.5px;font-weight:700;color:var(--muted);border-radius:12px}
+nav.tabs button svg{width:22px;height:22px}
+nav.tabs button[aria-current="page"]{color:var(--accent)}
+.fab{position:fixed;right:max(16px,calc(50% - 294px));bottom:calc(env(safe-area-inset-bottom) + 78px);width:56px;height:56px;border-radius:18px;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;box-shadow:0 10px 24px rgba(11,110,120,.35);z-index:21}
+.fab svg{width:26px;height:26px}
+
+/* sheet */
+.overlay{position:fixed;inset:0;background:rgba(6,14,18,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center;animation:fade .15s ease}
+.sheet{background:var(--surface);width:100%;max-width:620px;max-height:92%;overflow:auto;border-radius:22px 22px 0 0;padding:10px 18px calc(env(safe-area-inset-bottom) + 18px);animation:up .2s ease}
+.grab{width:40px;height:5px;border-radius:99px;background:var(--line);margin:0 auto 12px}
+.sheet h3{font-family:var(--font-display);font-size:21px;margin:0 0 4px;text-wrap:balance}
+.sheet .lead{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;background:var(--surface-2);border-radius:14px;padding:12px 14px;font-size:14px;margin:12px 0}
+.kv dt{color:var(--muted);font-weight:600}
+.kv dd{margin:0;text-align:right;font-weight:600;overflow-wrap:anywhere}
+.notebox{white-space:pre-wrap;background:var(--surface-2);border-radius:14px;padding:12px 14px;font-size:14px;margin:0 0 12px;overflow-wrap:anywhere}
+.field{display:grid;gap:6px;margin-bottom:12px}
+.field label{font-size:12.5px;font-weight:700;color:var(--muted)}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:11px 12px;font-size:16px;outline:0}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);background:var(--surface)}
+.field textarea{min-height:76px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mchips{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.mchips button{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:8px 0;font-size:13px;font-weight:700;color:var(--muted)}
+.mchips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btns{display:grid;gap:8px;margin-top:6px}
+.btn{border:0;border-radius:14px;padding:14px;font-weight:700;font-size:15px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+.btn.danger{background:transparent;color:var(--late);border-color:var(--late-soft)}
+.btn.ghost{background:transparent}
+.btn[disabled]{opacity:.55}
+.err{color:var(--late);font-size:13px;font-weight:600;min-height:1em;margin:0 0 6px}
+.paidbox{display:flex;align-items:center;gap:10px;background:var(--ok-soft);color:var(--ok);border-radius:14px;padding:12px 14px;font-weight:700;font-size:14px;margin-bottom:10px}
+.paidbox svg{width:18px;height:18px}
+
+/* toast + states */
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 148px);background:var(--ink);color:var(--bg);border-radius:14px;padding:10px 10px 10px 16px;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:calc(100% - 32px);animation:up .2s ease}
+.toast button{border:0;background:transparent;color:var(--hero-fill);font-weight:800;padding:6px 8px}
+.state{text-align:center;padding:48px 20px;color:var(--muted)}
+.state h2{font-family:var(--font-display);color:var(--ink);margin:0 0 6px;font-size:20px}
+.skel{height:64px;border-radius:14px;background:linear-gradient(90deg,var(--surface) 0%,var(--surface-2) 50%,var(--surface) 100%);background-size:200% 100%;animation:sh 1.2s linear infinite;margin-top:10px;border:1px solid var(--line)}
+.banner{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px}
+.banner.nag{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#FFF6E5;border-color:#F3D9A4;color:#7A4B07}
+.banner.nag b{flex:none;color:var(--accent);font-size:13.5px}
+@keyframes fade{from{opacity:0}}
+@keyframes up{from{transform:translateY(24px);opacity:0}}
+@keyframes sh{to{background-position:-200% 0}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:380px){.hero .big{font-size:27px}.item .amt{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="top">
+    <div>
+      <h1 id="title">Yaklaşan ödemeler</h1>
+      <div class="date" id="today"></div>
+    </div>
+    <button class="icon-btn" id="menuBtn" aria-label="Yedek">
+      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+    </button>
+  </header>
+  <main id="view">
+    <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+  </main>
+</div>
+
+<button class="fab" id="fab" aria-label="Yeni ödeme ekle">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<nav class="tabs" aria-label="Görünümler">
+  <div class="in">
+    <button data-tab="ajanda" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Yaklaşan
+    </button>
+    <button data-tab="ay">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+      Aylık
+    </button>
+    <button data-tab="kalemler">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
+      Kalemler
+    </button>
+  </div>
+</nav>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- constants ---------- */
+const CATS = {
+  kira:     {label:"Kira", h:228},
+  kart:     {label:"Kredi kartı", h:340},
+  sgk:      {label:"SGK", h:178},
+  vergi:    {label:"Vergi", h:32},
+  fatura:   {label:"Fatura & aidat", h:200},
+  personel: {label:"Personel", h:268},
+  isletme:  {label:"İşletme", h:140},
+  borc:     {label:"Senet & borç", h:12},
+  diger:    {label:"Diğer", h:210}
+};
+const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+const ALL = [1,2,3,4,5,6,7,8,9,10,11,12];
+const DAY = 864e5;
+
+const ICON = {
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  note:'<svg class="note-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h14v12l-4 4H5z"/><path d="M9 9h6M9 13h4"/></svg>',
+  alert:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg>',
+  left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  right:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>',
+  chev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>'
+};
+
+/* ---------- state ---------- */
+const S = {
+  items:[], months:{}, lastBackup:null, failed:null,
+  tab:"ajanda", cursor:null, monthFilter:"all", q:"", cat:"all"
+};
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2,"0");
+const ym = (y,m) => `${y}-${pad(m)}`;
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseISO = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+function todayDate(){ const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+function addMonths(period, k){ let [y,m] = period.split("-").map(Number); m += k; while(m>12){m-=12;y++} while(m<1){m+=12;y--} return ym(y,m); }
+const curPeriod = () => { const t = todayDate(); return ym(t.getFullYear(), t.getMonth()+1); };
+const daysBetween = (a,b) => Math.round((parseISO(b) - parseISO(a)) / DAY);
+
+const fmtFull = new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtInt = new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",maximumFractionDigits:0});
+function tl(n, exact){ if(n==null || isNaN(n)) return "—"; return (exact && n%1) ? fmtFull.format(n) : fmtInt.format(Math.round(n)); }
+const fmtDay = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"short",weekday:"short"});
+const fmtLong = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",year:"numeric"});
+const fmtHead = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",weekday:"long"});
+
+function parseAmount(s){
+  s = String(s ?? "").replace(/[\s₺TLtl]/g,"");
+  if(!s) return null;
+  if(s.includes(",")) s = s.replace(/\./g,"").replace(",",".");
+  else if((s.match(/\./g)||[]).length > 1) s = s.replace(/\./g,"");
+  else if(/^\d+\.\d{3}$/.test(s)) s = s.replace(".","");
+  const n = Number(s);
+  return isFinite(n) ? Math.round(n*100)/100 : NaN;
+}
+const amountInput = n => n==null ? "" : String(n).replace(".",",");
+
+function relLabel(dateISO){
+  const d = daysBetween(iso(todayDate()), dateISO);
+  if(d === 0) return "Bugün";
+  if(d === 1) return "Yarın";
+  if(d === -1) return "Dün gecikti";
+  if(d < 0) return `${-d} gün gecikti`;
+  return `${d} gün sonra`;
+}
+function freqLabel(it){
+  if(it.once) return "Tek sefer · " + fmtLong.format(parseISO(it.once));
+  const ms = (it.months && it.months.length) ? it.months : ALL;
+  const d = `ayın ${it.day}'${daySuffix(it.day)}`;
+  if(ms.length === 12) return "Her " + d;
+  if(ms.length === 1) return `Her yıl ${ML[ms[0]-1]} · ${it.day}. gün`;
+  return ms.map(m => MS[m-1]).join(", ") + ` · ${it.day}. gün`;
+}
+function daySuffix(n){
+  const last = n % 10, tens = n % 100;
+  if(tens === 10 || tens === 30) return "u";
+  if(tens === 20 || tens === 50) return "si";
+  if(tens === 40 || tens === 60) return "ı";
+  if(last === 0 && tens === 0) return "ü";
+  return ({1:"i",2:"si",3:"ü",4:"ü",5:"i",6:"sı",7:"si",8:"i",9:"u"})[last] || "i";
+}
+const catOf = it => CATS[it.cat] || CATS.diger;
+
+/* ---------- occurrences ---------- */
+function occurrences(period){
+  const [y,m] = period.split("-").map(Number);
+  const last = new Date(y, m, 0).getDate();
+  const paidMap = (S.months[period] && S.months[period].paid) || {};
+  const out = [];
+  for(const it of S.items){
+    let date;
+    if(it.once){
+      if(it.once.slice(0,7) !== period) continue;
+      date = it.once;
+    } else {
+      if(it.start && period < it.start) continue;
+      if(it.end && period > it.end) continue;
+      const ms = (it.months && it.months.length) ? it.months : ALL;
+      if(!ms.includes(m)) continue;
+      date = `${period}-${pad(Math.min(Math.max(1, it.day||1), last))}`;
+    }
+    out.push({it, date, period, paid: paidMap[it.id] || null});
+  }
+  return out.sort((a,b) => a.date.localeCompare(b.date) || a.it.name.localeCompare(b.it.name,"tr"));
+}
+function occRange(fromP, toP){
+  const out = []; let p = fromP;
+  while(p <= toP){ out.push(...occurrences(p)); p = addMonths(p,1); }
+  return out;
+}
+const sum = arr => arr.reduce((s,o) => s + (o.paid && o.paid.amount!=null ? o.paid.amount : (o.it.amount||0)), 0);
+const sumDue = arr => arr.reduce((s,o) => s + (o.it.amount||0), 0);
+
+/* ---------- storage (on this phone) ---------- */
+const KEY = "odemeler.v1";
+function load(){
+  try {
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return;
+    const d = JSON.parse(raw);
+    S.items = Array.isArray(d.items) ? d.items : [];
+    S.months = d.months && typeof d.months === "object" ? d.months : {};
+    S.lastBackup = d.lastBackup || null;
+  } catch(e){ S.failed = "Kayıtlı veriler okunamadı. Yedekten geri yükleyebilirsiniz."; }
+}
+function persist(){
+  try {
+    localStorage.setItem(KEY, JSON.stringify({version:1, items:S.items, months:S.months, lastBackup:S.lastBackup}));
+    return true;
+  } catch(e){
+    toast("Kaydedilemedi: telefonda yer kalmamış olabilir. Hemen yedek alın.");
+    return false;
+  }
+}
+function dbErr(){ return "Kaydedilemedi. Telefonda yer açıp tekrar deneyin."; }
+function newId(){ return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+async function setPaid(period, id, rec){
+  const cur = (S.months[period] && S.months[period].paid) || {};
+  const paid = {...cur};
+  if(rec) paid[id] = rec; else delete paid[id];
+  S.months = {...S.months, [period]: {paid}};
+  persist(); render();
+}
+async function saveItem(id, data){
+  const nid = id || newId();
+  const rest = S.items.filter(i => i.id !== nid);
+  S.items = [...rest, {id: nid, ...data}];
+  if(!persist()) throw new Error("storage");
+  render();
+  return nid;
+}
+async function deleteItem(id){
+  S.items = S.items.filter(i => i.id !== id);
+  if(!persist()) throw new Error("storage");
+  render();
+}
+
+/* ---------- toast ---------- */
+let toastTimer;
+function toast(msg, actionLabel, action){
+  const old = $(".toast"); if(old) old.remove();
+  clearTimeout(toastTimer);
+  const el = document.createElement("div");
+  el.className = "toast"; el.setAttribute("role","status");
+  el.innerHTML = `<span>${esc(msg)}</span>` + (actionLabel ? `<button type="button">${esc(actionLabel)}</button>` : "");
+  if(actionLabel) el.querySelector("button").onclick = () => { el.remove(); action(); };
+  document.body.appendChild(el);
+  toastTimer = setTimeout(() => el.remove(), 4500);
+}
+
+/* ---------- row ---------- */
+function rowHTML(o, opts = {}){
+  const t = iso(todayDate());
+  const late = !o.paid && o.date < t;
+  const c = catOf(o.it);
+  const rel = relLabel(o.date);
+  const d = daysBetween(t, o.date);
+  const relCls = (!o.paid && d >= 0 && d <= 2) ? "rel soon" : "rel";
+  const amount = o.paid && o.paid.amount != null ? o.paid.amount : o.it.amount;
+  const showDate = opts.hideDate ? "" : `<span>${esc(fmtDay.format(parseISO(o.date)))}</span>`;
+  const relPart = o.paid ? `<span class="rel" style="color:var(--ok)">Ödendi</span>` : `<span class="${relCls}">${rel}</span>`;
+  return `<div class="item${o.paid?" paid":""}${late?" late":""}" data-id="${esc(o.it.id)}" data-period="${o.period}">
+    <button class="check" type="button" data-act="toggle" aria-label="${o.paid?"Ödenmedi olarak geri al":"Ödendi olarak işaretle"}: ${esc(o.it.name)}">${ICON.check}</button>
+    <button class="main" type="button" data-act="open">
+      <span class="name">${esc(o.it.name)}</span>
+      <span class="meta">${relPart}${showDate ? "<span>·</span>"+showDate : ""}<span class="tag" style="--h:${c.h}">${esc(c.label)}</span>${o.it.note ? ICON.note : ""}</span>
+    </button>
+    <div class="amt num">${amount==null ? '<small>Tutar yok</small>' : tl(amount)}</div>
+  </div>`;
+}
+function sectionHTML(title, list, opts = {}){
+  if(!list.length && !opts.showEmpty) return "";
+  const total = list.filter(o => !o.paid).reduce((s,o)=>s+(o.it.amount||0),0);
+  const unpaid = list.filter(o => !o.paid).length;
+  return `<section class="section ${opts.cls||""}">
+    <div class="sec-head"><h2>${esc(title)} <span class="count">${unpaid}${list.length!==unpaid?"/"+list.length:""}</span></h2>${total ? `<span class="sum num">${tl(total)}</span>` : ""}</div>
+    <div class="list">${list.length ? list.map(o => rowHTML(o, opts)).join("") : `<div class="empty-line">${esc(opts.emptyText||"Ödeme yok.")}</div>`}</div>
+  </section>`;
+}
+
+/* ---------- views ---------- */
+function heroHTML(period){
+  const occ = occurrences(period);
+  const total = sum(occ);
+  const paid = occ.filter(o => o.paid);
+  const paidSum = sum(paid);
+  const left = Math.max(0, total - paidSum);
+  const pct = total ? Math.round(paidSum / total * 100) : 0;
+  const [y,m] = period.split("-").map(Number);
+  return `<div class="hero">
+    <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan</span><span class="sub num">%${pct} ödendi</span></div>
+    <div class="big num">${tl(left)}</div>
+    <div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>
+    <div class="split">
+      <div><span class="sub">Ödenen · ${paid.length} kalem</span><b class="num">${tl(paidSum)}</b></div>
+      <div><span class="sub">Ay toplamı · ${occ.length} kalem</span><b class="num">${tl(total)}</b></div>
+    </div>
+  </div>`;
+}
+
+function viewAjanda(){
+  const t = iso(todayDate());
+  const cp = curPeriod();
+  const all = occRange(addMonths(cp,-3), addMonths(cp,2));
+  const late = all.filter(o => !o.paid && o.date < t);
+  const today = all.filter(o => o.date === t);
+  const week = all.filter(o => { const d = daysBetween(t,o.date); return d>=1 && d<=7; });
+  const soon = all.filter(o => { const d = daysBetween(t,o.date); return d>=8 && d<=30 && !o.paid; });
+  const lateSum = late.reduce((s,o)=>s+(o.it.amount||0),0);
+  let h = heroHTML(cp);
+  if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tl(lateSum)}</span></button>`;
+  h += sectionHTML("Gecikenler", late, {cls:"sec-late"});
+  h += sectionHTML("Bugün", today, {showEmpty:true, hideDate:true, emptyText:"Bugün vadesi gelen ödeme yok."});
+  h += sectionHTML("Önümüzdeki 7 gün", week, {showEmpty:true, emptyText:"Bu hafta başka ödeme yok."});
+  h += sectionHTML("8–30 gün içinde", soon);
+  return h;
+}
+
+function viewAy(){
+  const p = S.cursor || curPeriod();
+  const [y,m] = p.split("-").map(Number);
+  let occ = occurrences(p);
+  const f = S.monthFilter;
+  const shown = occ.filter(o => f==="all" || (f==="open" ? !o.paid : !!o.paid));
+  const t = iso(todayDate());
+  let h = `<div class="month-nav">
+    <button class="icon-btn" type="button" data-act="prev" aria-label="Önceki ay">${ICON.left}</button>
+    <h2>${ML[m-1]} ${y}</h2>
+    <button class="icon-btn" type="button" data-act="next" aria-label="Sonraki ay">${ICON.right}</button>
+  </div>`;
+  h += heroHTML(p);
+  h += `<div class="seg" role="group" aria-label="Filtre">
+    <button type="button" data-filter="all" aria-pressed="${f==="all"}">Tümü · ${occ.length}</button>
+    <button type="button" data-filter="open" aria-pressed="${f==="open"}">Bekleyen · ${occ.filter(o=>!o.paid).length}</button>
+    <button type="button" data-filter="paid" aria-pressed="${f==="paid"}">Ödenen · ${occ.filter(o=>o.paid).length}</button>
+  </div>`;
+  if(!shown.length){ h += `<div class="state"><h2>Gösterilecek ödeme yok</h2>Bu filtrede ${ML[m-1]} ayına ait kalem bulunmuyor.</div>`; return h; }
+  const groups = new Map();
+  for(const o of shown){ if(!groups.has(o.date)) groups.set(o.date, []); groups.get(o.date).push(o); }
+  for(const [date, list] of groups){
+    const daySum = list.reduce((s,o)=>s+(o.paid&&o.paid.amount!=null?o.paid.amount:(o.it.amount||0)),0);
+    h += `<section class="section"><div class="day-head${date===t?" today":""}"><span>${esc(fmtHead.format(parseISO(date)))}${date===t?" · Bugün":""}</span><span class="num">${tl(daySum)}</span></div>
+      <div class="list">${list.map(o => rowHTML(o,{hideDate:true})).join("")}</div></section>`;
+  }
+  return h;
+}
+
+function viewKalemler(){
+  const q = S.q.trim().toLocaleLowerCase("tr");
+  const used = new Set(S.items.map(i => i.cat || "diger"));
+  let list = S.items.filter(i => (S.cat==="all" || (i.cat||"diger")===S.cat) && (!q || (i.name+" "+(i.note||"")).toLocaleLowerCase("tr").includes(q)));
+  list.sort((a,b) => (a.once?1:0)-(b.once?1:0) || (a.once||"").localeCompare(b.once||"") || (a.day||0)-(b.day||0) || a.name.localeCompare(b.name,"tr"));
+  const monthly = S.items.filter(i => !i.once && (!i.months || !i.months.length || i.months.length===12) && (!i.end || i.end >= curPeriod()));
+  const monthlySum = monthly.reduce((s,i)=>s+(i.amount||0),0);
+  let h = `<label class="search" for="q">${ICON.search}<input id="q" type="search" placeholder="Kalem veya not ara" value="${esc(S.q)}" autocomplete="off"></label>
+  <div class="chips" role="group" aria-label="Kategori">
+    <button class="chip" type="button" data-cat="all" aria-pressed="${S.cat==="all"}">Tümü · ${S.items.length}</button>
+    ${Object.entries(CATS).filter(([k])=>used.has(k)).map(([k,c]) => `<button class="chip" type="button" data-cat="${k}" aria-pressed="${S.cat===k}">${esc(c.label)} · ${S.items.filter(i=>(i.cat||"diger")===k).length}</button>`).join("")}
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span>Her ay tekrarlayan</span><b class="num">${monthly.length} kalem</b></div>
+    <div class="stat"><span>Aylık sabit toplam</span><b class="num">${tl(monthlySum)}</b></div>
+  </div>`;
+  if(!list.length){ h += `<div class="state"><h2>Sonuç yok</h2>Aramayı veya kategoriyi değiştirin.</div>`; return h; }
+  h += `<section class="section"><div class="list">` + list.map(i => {
+    const c = catOf(i);
+    return `<div class="item" data-id="${esc(i.id)}">
+      <button class="main" type="button" data-act="edit">
+        <span class="name">${esc(i.name)}</span>
+        <span class="meta"><span>${esc(freqLabel(i))}</span><span class="tag" style="--h:${c.h}">${esc(c.label)}</span>${i.note?ICON.note:""}</span>
+      </button>
+      <div class="amt num">${i.amount==null?'<small>Tutar yok</small>':tl(i.amount)}</div>
+    </div>`;
+  }).join("") + `</div></section>`;
+  return h;
+}
+
+function backupNag(){
+  if(S.tab !== "ajanda") return "";
+  const days = S.lastBackup ? daysBetween(S.lastBackup.slice(0,10), iso(todayDate())) : null;
+  if(days !== null && days < 7) return "";
+  const msg = days === null ? "Henüz yedek almadınız. Veriler yalnızca bu telefonda duruyor." : `Son yedek ${days} gün önce alındı.`;
+  return `<button class="banner nag" type="button" data-act="backup"><span>${esc(msg)}</span><b>Yedek al</b></button>`;
+}
+
+/* ---------- render ---------- */
+function render(){
+  const v = $("#view");
+  const titles = {ajanda:"Yaklaşan ödemeler", ay:"Aylık görünüm", kalemler:"Ödeme kalemleri"};
+  $("#title").textContent = titles[S.tab];
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab===S.tab ? "page" : "false"));
+  if(S.failed){ v.innerHTML = `<div class="state"><h2>Veriler açılamadı</h2>${esc(S.failed)}<div class="btns" style="margin-top:16px"><button class="btn primary" type="button" data-act="backup">Yedekten geri yükle</button></div></div>`; return; }
+  if(!S.items.length){
+    v.innerHTML = `<div class="state"><h2>Hoş geldiniz</h2>Eski uygulamadan aldığınız yedeği yükleyin ya da + düğmesiyle ilk ödemenizi ekleyin.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="backup">Yedekten yükle</button></div></div>`;
+    return;
+  }
+  const focusQ = document.activeElement && document.activeElement.id === "q";
+  const caret = focusQ ? document.activeElement.selectionStart : null;
+  v.innerHTML = backupNag() +
+    (S.tab==="ajanda" ? viewAjanda() : S.tab==="ay" ? viewAy() : viewKalemler());
+  if(focusQ){ const q = $("#q"); q.focus(); try{ q.setSelectionRange(caret, caret); }catch(e){} }
+}
+
+/* ---------- interactions ---------- */
+function findOcc(id, period){ return occurrences(period).find(o => o.it.id === id); }
+
+function quickToggle(id, period){
+  const o = findOcc(id, period); if(!o) return;
+  if(o.paid){
+    const prev = o.paid;
+    setPaid(period, id, null);
+    toast(`${o.it.name} bekleyenlere alındı`, "Geri al", () => setPaid(period, id, prev));
+  } else {
+    if(o.it.amount == null){ openDetail(id, period, true); return; }
+    const rec = {at: iso(todayDate()), amount: o.it.amount};
+    setPaid(period, id, rec);
+    toast(`${o.it.name} ödendi`, "Geri al", () => setPaid(period, id, null));
+  }
+}
+
+document.addEventListener("click", e => {
+  const tabBtn = e.target.closest("nav.tabs button");
+  if(tabBtn){ setTab(tabBtn.dataset.tab); return; }
+  const el = e.target.closest("[data-act],[data-filter],[data-cat]");
+  if(!el || el.closest(".overlay")) return;
+  if(el.dataset.filter){ S.monthFilter = el.dataset.filter; render(); return; }
+  if(el.dataset.cat){ S.cat = el.dataset.cat; render(); return; }
+  const act = el.dataset.act;
+  const row = el.closest(".item");
+  if(act === "toggle") quickToggle(row.dataset.id, row.dataset.period);
+  else if(act === "open") openDetail(row.dataset.id, row.dataset.period);
+  else if(act === "edit") openEditor(row.dataset.id);
+  else if(act === "prev"){ S.cursor = addMonths(S.cursor||curPeriod(), -1); render(); }
+  else if(act === "next"){ S.cursor = addMonths(S.cursor||curPeriod(), 1); render(); }
+  else if(act === "backup") openMenu();
+  else if(act === "jump-late"){ const s = document.querySelector(".sec-late"); if(s) s.scrollIntoView({behavior:"smooth", block:"start"}); }
+});
+document.addEventListener("input", e => { if(e.target.id === "q"){ S.q = e.target.value; render(); } });
+$("#fab").onclick = () => openEditor(null);
+$("#menuBtn").onclick = openMenu;
+
+function setTab(tab){
+  S.tab = tab; if(tab==="ay" && !S.cursor) S.cursor = curPeriod();
+  if(location.hash !== "#"+tab) history.replaceState(null, "", "#"+tab);
+  render(); window.scrollTo(0,0);
+}
+window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if(["ajanda","ay","kalemler"].includes(h) && h!==S.tab){ S.tab=h; render(); } });
+
+/* ---------- sheets ---------- */
+function openSheet(html, onMount){
+  closeSheet();
+  const ov = document.createElement("div");
+  ov.className = "overlay";
+  ov.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
+  ov.addEventListener("click", e => { if(e.target === ov) closeSheet(); });
+  document.body.appendChild(ov);
+  document.body.style.overflow = "hidden";
+  onMount && onMount(ov.querySelector(".sheet"));
+  const f = ov.querySelector("[autofocus]"); if(f) setTimeout(()=>f.focus(), 60);
+}
+function closeSheet(){ const o = $(".overlay"); if(o) o.remove(); document.body.style.overflow = ""; }
+document.addEventListener("keydown", e => { if(e.key === "Escape") closeSheet(); });
+
+function openDetail(id, period, focusAmount){
+  const o = findOcc(id, period); if(!o) return;
+  const it = o.it, c = catOf(it);
+  const html = `
+    <h3>${esc(it.name)}</h3>
+    <p class="lead"><span class="tag" style="--h:${c.h}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))}</p>
+    <dl class="kv">
+      <dt>Vade</dt><dd>${esc(fmtHead.format(parseISO(o.date)))}</dd>
+      <dt>Durum</dt><dd style="color:${o.paid?"var(--ok)":(o.date<iso(todayDate())?"var(--late)":"inherit")}">${o.paid ? "Ödendi" : esc(relLabel(o.date))}</dd>
+      <dt>Planlanan tutar</dt><dd class="num">${tl(it.amount, true)}</dd>
+    </dl>
+    ${it.note ? `<div class="notebox">${esc(it.note)}</div>` : ""}
+    ${o.paid ? `
+      <div class="paidbox">${ICON.check}<span>${esc(fmtLong.format(parseISO(o.paid.at)))} tarihinde ödendi${o.paid.amount!=null?" · "+tl(o.paid.amount,true):""}</span></div>
+      <div class="btns">
+        <button class="btn" type="button" id="unpay">Ödenmedi olarak geri al</button>
+        <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
+      </div>` : `
+      <div class="two">
+        <div class="field"><label for="pAmt">Ödenen tutar (₺)</label><input id="pAmt" inputmode="decimal" placeholder="Örn. 92.500" value="${esc(amountInput(it.amount))}" ${focusAmount?"autofocus":""}></div>
+        <div class="field"><label for="pAt">Ödeme tarihi</label><input id="pAt" type="date" value="${iso(todayDate())}"></div>
+      </div>
+      <p class="err" id="pErr"></p>
+      <div class="btns">
+        <button class="btn ok" type="button" id="pay">Ödendi olarak işaretle</button>
+        <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
+      </div>`}`;
+  openSheet(html, sh => {
+    sh.querySelector("#edit").onclick = () => openEditor(id);
+    const un = sh.querySelector("#unpay");
+    if(un) un.onclick = () => { const prev = o.paid; closeSheet(); setPaid(period, id, null); toast(`${it.name} bekleyenlere alındı`, "Geri al", () => setPaid(period, id, prev)); };
+    const pay = sh.querySelector("#pay");
+    if(pay) pay.onclick = () => {
+          const raw = sh.querySelector("#pAmt").value;
+      const amt = parseAmount(raw);
+      if(Number.isNaN(amt)){ sh.querySelector("#pErr").textContent = "Tutarı rakamla yazın, örneğin 92.500,50."; return; }
+      const at = sh.querySelector("#pAt").value || iso(todayDate());
+      closeSheet();
+      setPaid(period, id, {at, amount: amt});
+      toast(`${it.name} ödendi`, "Geri al", () => setPaid(period, id, null));
+    };
+  });
+}
+
+function openEditor(id){
+  const it = id ? S.items.find(i => i.id === id) : null;
+  if(id && !it) return;
+  const cp = curPeriod();
+  const mode = it ? (it.once ? "once" : ((it.months && it.months.length && it.months.length < 12) ? "months" : "monthly")) : "monthly";
+  let months = it && it.months && it.months.length && it.months.length < 12 ? [...it.months] : [Number(cp.slice(5))];
+  const html = `
+    <h3>${it ? "Kalemi düzenle" : "Yeni ödeme"}</h3>
+    <p class="lead">${it ? "Değişiklikler bu ve sonraki aylara yansır; geçmiş ödendi kayıtları korunur." : "Tekrarlayan veya tek seferlik bir ödeme ekleyin."}</p>
+    <form id="f" novalidate>
+      <div class="field"><label for="fName">Ödeme adı</label><input id="fName" required value="${esc(it?it.name:"")}" placeholder="Örn. Yıldız Kira" ${it?"":"autofocus"}></div>
+      <div class="two">
+        <div class="field"><label for="fAmt">Tutar (₺)</label><input id="fAmt" inputmode="decimal" value="${esc(it?amountInput(it.amount):"")}" placeholder="Boş bırakılabilir"></div>
+        <div class="field"><label for="fCat">Kategori</label><select id="fCat">${Object.entries(CATS).map(([k,c])=>`<option value="${k}" ${(it?it.cat:"diger")===k?"selected":""}>${esc(c.label)}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label for="fMode">Ne sıklıkla?</label>
+        <select id="fMode">
+          <option value="monthly" ${mode==="monthly"?"selected":""}>Her ay</option>
+          <option value="months" ${mode==="months"?"selected":""}>Belirli aylarda (yıllık, 3 ayda bir…)</option>
+          <option value="once" ${mode==="once"?"selected":""}>Tek seferlik</option>
+        </select></div>
+      <div id="recur">
+        <div class="field" id="mWrap"><label>Hangi aylarda?</label><div class="mchips" id="mchips">${MS.map((m,i)=>`<button type="button" data-m="${i+1}" aria-pressed="${months.includes(i+1)}">${m}</button>`).join("")}</div></div>
+        <div class="two">
+          <div class="field"><label for="fDay">Ayın kaçında?</label><input id="fDay" type="number" inputmode="numeric" min="1" max="31" value="${it&&!it.once?it.day:""}" placeholder="1–31"></div>
+          <div class="field"><label for="fStart">Başlangıç ayı</label><input id="fStart" type="month" value="${esc(it&&it.start?it.start:cp)}"></div>
+        </div>
+        <div class="field"><label for="fEnd">Son ay (isteğe bağlı)</label><input id="fEnd" type="month" value="${esc(it&&it.end?it.end:"")}"></div>
+      </div>
+      <div class="field" id="onceWrap"><label for="fOnce">Ödeme tarihi</label><input id="fOnce" type="date" value="${esc(it&&it.once?it.once:"")}"></div>
+      <div class="field"><label for="fNote">Not</label><textarea id="fNote" placeholder="Hesap no, zam bilgisi, hatırlatma…">${esc(it?it.note||"":"")}</textarea></div>
+      <p class="err" id="fErr"></p>
+      <div class="btns">
+        <button class="btn primary" type="submit" id="save">${it ? "Değişiklikleri kaydet" : "Ödemeyi ekle"}</button>
+        ${it ? `<button class="btn danger" type="button" id="del">Bu kalemi sil</button>` : ""}
+        <button class="btn ghost" type="button" id="cancel">Vazgeç</button>
+      </div>
+    </form>`;
+  openSheet(html, sh => {
+    const modeSel = sh.querySelector("#fMode");
+    const sync = () => {
+      const m = modeSel.value;
+      sh.querySelector("#recur").style.display = m === "once" ? "none" : "";
+      sh.querySelector("#mWrap").style.display = m === "months" ? "" : "none";
+      sh.querySelector("#onceWrap").style.display = m === "once" ? "" : "none";
+    };
+    modeSel.onchange = sync; sync();
+    sh.querySelector("#mchips").onclick = e => {
+      const b = e.target.closest("button[data-m]"); if(!b) return;
+      const m = Number(b.dataset.m);
+      months = months.includes(m) ? months.filter(x=>x!==m) : [...months, m].sort((a,b)=>a-b);
+      b.setAttribute("aria-pressed", months.includes(m));
+    };
+    sh.querySelector("#cancel").onclick = closeSheet;
+    const del = sh.querySelector("#del");
+    if(del) del.onclick = async () => {
+      if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
+      del.disabled = true;
+      try { await deleteItem(id); closeSheet(); toast(`${it.name} silindi`); }
+      catch(err){ sh.querySelector("#fErr").textContent = dbErr(err); del.disabled = false; }
+    };
+    sh.querySelector("#f").onsubmit = async ev => {
+      ev.preventDefault();
+      const err = sh.querySelector("#fErr");
+      const name = sh.querySelector("#fName").value.trim();
+      const amount = parseAmount(sh.querySelector("#fAmt").value);
+      const mode = modeSel.value;
+      if(!name){ err.textContent = "Ödemeye bir ad verin."; return; }
+      if(Number.isNaN(amount)){ err.textContent = "Tutarı rakamla yazın, örneğin 92.500,50."; return; }
+      const data = { name, amount, cat: sh.querySelector("#fCat").value, note: sh.querySelector("#fNote").value.trim(), created: it && it.created ? it.created : Date.now() };
+      if(mode === "once"){
+        const d = sh.querySelector("#fOnce").value;
+        if(!d){ err.textContent = "Ödeme tarihini seçin."; return; }
+        Object.assign(data, {once: d, day: Number(d.slice(8)), months: [], start: d.slice(0,7)});
+      } else {
+        const day = Number(sh.querySelector("#fDay").value);
+        if(!Number.isInteger(day) || day < 1 || day > 31){ err.textContent = "Ayın gününü 1 ile 31 arasında yazın."; return; }
+        if(mode === "months" && !months.length){ err.textContent = "En az bir ay seçin."; return; }
+        const start = sh.querySelector("#fStart").value || cp;
+        const end = sh.querySelector("#fEnd").value || null;
+        if(end && end < start){ err.textContent = "Son ay, başlangıç ayından önce olamaz."; return; }
+        Object.assign(data, {once: null, day, months: mode === "months" ? months : ALL, start});
+        if(end) data.end = end;
+      }
+      const btn = sh.querySelector("#save"); btn.disabled = true;
+      try { await saveItem(id, data); closeSheet(); toast(it ? "Kaydedildi" : `${name} eklendi`); }
+      catch(e2){ err.textContent = dbErr(e2); btn.disabled = false; }
+    };
+  });
+}
+
+function backupData(){
+  return {app:"odeme-takvimi", version:1, exported:new Date().toISOString(), items:S.items, months:S.months};
+}
+function markBackedUp(){ S.lastBackup = new Date().toISOString(); persist(); render(); }
+function backupFile(){
+  const name = `odemeler-yedek-${iso(todayDate())}.json`;
+  return new File([JSON.stringify(backupData(), null, 1)], name, {type:"application/json"});
+}
+
+function openMenu(){
+  const last = S.lastBackup ? fmtLong.format(new Date(S.lastBackup)) : "hiç alınmadı";
+  const canShare = !!(navigator.canShare && navigator.canShare({files:[backupFile()]}));
+  const html = `
+    <h3>Yedek</h3>
+    <p class="lead">Ödemeleriniz yalnızca bu telefonda saklanıyor. Telefon değişirse ya da uygulama silinirse yedek dosyasıyla geri getirirsiniz. Son yedek: <b>${esc(last)}</b>.</p>
+    <div class="btns">
+      ${canShare ? `<button class="btn primary" type="button" id="share">Yedeği OneDrive'a / Drive'a gönder</button>` : ""}
+      <button class="btn ${canShare?"":"primary"}" type="button" id="dl">Yedek dosyasını indir</button>
+      <button class="btn ghost" type="button" id="copy">Yedeği panoya kopyala</button>
+    </div>
+    <div class="field" style="margin-top:18px"><label for="impFile">Yedekten geri yükle</label><input id="impFile" type="file" accept=".json,.txt,application/json,text/plain"></div>
+    <div class="field"><label for="impTxt">veya yedek metnini yapıştırın</label>
+      <textarea id="impTxt" placeholder="Eski uygulamadaki ⋯ > Yedeği panoya kopyala ile aldığınız metin"></textarea></div>
+    <p class="err" id="mErr"></p>
+    <div class="btns">
+      <button class="btn" type="button" id="imp">Yedeği yükle</button>
+      <button class="btn ghost" type="button" id="close">Kapat</button>
+    </div>`;
+  openSheet(html, sh => {
+    const msg = sh.querySelector("#mErr");
+    sh.querySelector("#close").onclick = closeSheet;
+    const share = sh.querySelector("#share");
+    if(share) share.onclick = async () => {
+      try { await navigator.share({files:[backupFile()], title:"Ödemeler yedeği"}); markBackedUp(); closeSheet(); toast("Yedek gönderildi"); }
+      catch(e){ if(e && e.name !== "AbortError"){ msg.textContent = "Paylaşılamadı. \"Yedek dosyasını indir\"i deneyin."; } }
+    };
+    sh.querySelector("#dl").onclick = () => {
+      const f = backupFile(); const url = URL.createObjectURL(f);
+      const a = document.createElement("a"); a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      markBackedUp(); closeSheet(); toast("Yedek İndirilenler klasörüne kaydedildi");
+    };
+    sh.querySelector("#copy").onclick = async () => {
+      const data = JSON.stringify(backupData());
+      try { await navigator.clipboard.writeText(data); markBackedUp(); closeSheet(); toast("Yedek panoya kopyalandı"); }
+      catch(e){ sh.querySelector("#impTxt").value = data; msg.style.color = "var(--muted)"; msg.textContent = "Pano kullanılamadı. Yedek aşağıdaki kutuya yazıldı, oradan kopyalayın."; }
+    };
+    sh.querySelector("#impFile").onchange = async e => { const f = e.target.files[0]; if(f) sh.querySelector("#impTxt").value = await f.text(); };
+    const imp = sh.querySelector("#imp");
+    imp.onclick = () => {
+      msg.style.color = "";
+      let data;
+      try { data = JSON.parse(sh.querySelector("#impTxt").value); } catch(e){ msg.textContent = "Bu metin geçerli bir yedek değil. Dosyayı seçin ya da metnin tamamını yapıştırın."; return; }
+      if(!data || !Array.isArray(data.items)){ msg.textContent = "Yedekte ödeme kalemi bulunamadı."; return; }
+      const items = data.items.filter(i => i && i.id && i.name);
+      if(S.items.length && imp.dataset.confirm !== "1"){
+        imp.dataset.confirm = "1";
+        imp.textContent = `Mevcut ${S.items.length} kalemin yerine ${items.length} kalem yüklensin mi? Onaylamak için tekrar dokunun`;
+        return;
+      }
+      const months = {};
+      for(const [p, v] of Object.entries(data.months || {})) if(/^\d{4}-\d{2}$/.test(p)) months[p] = {paid: (v && v.paid) || {}};
+      const prev = {items:S.items, months:S.months};
+      S.items = items; S.months = months; S.failed = null;
+      if(!persist()){ S.items = prev.items; S.months = prev.months; msg.textContent = dbErr(); return; }
+      closeSheet(); render(); toast(`${items.length} kalem yedekten yüklendi`);
+    };
+  });
+}
+
+/* ---------- boot ---------- */
+function boot(){
+  $("#today").textContent = fmtHead.format(todayDate());
+  const h = location.hash.slice(1);
+  if(["ajanda","ay","kalemler"].includes(h)) S.tab = h;
+  load();
+  render();
+  try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+  if("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+// keep "today" right on an app left open overnight
+function tick(){ const n = iso(todayDate()); if(n !== tick.d){ tick.d = n; $("#today").textContent = fmtHead.format(todayDate()); render(); } }
+tick.d = iso(todayDate());
+setInterval(tick, 60000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(); });
+window.addEventListener("storage", e => { if(e.key === KEY){ load(); render(); } });
+boot();
+})();
+</script>
+</body>
+</html>
