@@ -12,5 +12,5 @@ Yaklaşan ve geciken ödemeleri takip etmek için telefonda çalışan küçük 
 |---|---|
 | `index.html` | Uygulamanın tamamı (arayüz ve mantık) |
 | `manifest.webmanifest` | Ana ekrana eklenince adı, ikonu ve rengi |
-| `sw.js` | İnternetsiz çalışma. `index.html`, `sw.js` veya ikonlar değişince içindeki `VERSION` artırılmalı; açık uygulama yeni sürümü bu sayede fark edip "Yenile" önerir |
+| `sw.js` | İnternetsiz çalışma. `index.html`, `sw.js` veya ikonlar değişince içindeki `VERSION` ve `index.html`deki `APP_VERSION` birlikte artırılmalı (⋯ menüsünün altında görünür); açık uygulama yeni sürümü bu sayede fark edip "Yenile" önerir |
 | `icons/` | Uygulama ikonları |

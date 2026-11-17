@@ -1,12 +1,14 @@
 // Ödemeler service worker: keeps the app usable offline.
 // Bump VERSION whenever index.html, sw.js or the icons change: that is what tells an open app a new version is ready.
-const VERSION = "odemeler-v7";
+const VERSION = "odemeler-v8";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"];
 const PAGE = "index.html";
 const NET_WAIT = 3500;  // on a weak connection, show the saved copy after this many ms rather than a blank screen
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: "reload" skips the browser's HTTP cache (GitHub Pages lets it keep files for 10 minutes),
+  // otherwise a new version could be installed together with the previous index.html
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL.map(u => new Request(u, {cache: "reload"})))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
@@ -34,7 +36,7 @@ self.addEventListener("fetch", e => {
 
   // The page itself: network first so updates arrive; the saved copy when offline, slow, or the server errs.
   if(req.mode === "navigate"){
-    const net = fetch(req);
+    const net = fetch(new Request(req, {cache: "no-cache"}));  // always ask the server whether the page changed
     e.waitUntil(net.then(res => {
       if(!isAppPage(res)) return;
       const copy = res.clone();  // clone now, before the page starts reading the body

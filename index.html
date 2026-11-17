@@ -35,7 +35,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
 .num{font-variant-numeric:tabular-nums}
-.app{max-width:620px;margin:0 auto;min-height:100%;padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 96px)}
+.app{touch-action:pan-y pinch-zoom;max-width:620px;margin:0 auto;min-height:100%;padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 96px)}
 header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 2px 14px}
 header.top h1{font-family:var(--font-display);font-size:26px;letter-spacing:-.01em;margin:0;line-height:1.1;text-wrap:balance}
 header.top .date{color:var(--muted);font-size:13px;font-weight:500;margin-top:2px}
@@ -288,6 +288,8 @@ const DEFAULT_CATS = [
   {id:"borc",     label:"Senet & borç",  h:12,  kind:"fixed"},
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
+// Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
+const APP_VERSION = 8;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -971,7 +973,7 @@ window.addEventListener("hashchange", () => { const h = location.hash.slice(1); 
 // swipe counts, so scrolling a list never changes tabs. Swipes starting at the screen edges are left alone:
 // there Android's gesture navigation means "back", which would close the app.
 const TAB_ORDER = ["ajanda","ay","kalemler","bilgiler"];
-const SWIPE = {edge: 32, min: 70, ratio: 2, maxMs: 700};
+const SWIPE = {edge: 28, min: 60, ratio: 1.5, maxMs: 900};
 let swipeStart = null;
 // listened for on the whole page area (#app), so empty space below a short list also takes the swipe
 const swipeArea = $("#app");
@@ -1414,7 +1416,8 @@ function openMenu(){
     <div class="btns">
       <button class="btn" type="button" id="imp">Yedeği yükle</button>
       <button class="btn ghost" type="button" id="close">Kapat</button>
-    </div>`;
+    </div>
+    <p class="lead" style="text-align:center;margin:14px 0 0;font-size:12px">Sürüm ${APP_VERSION}</p>`;
   openSheet(html, sh => {
     const msg = sh.querySelector("#mErr");
     sh.querySelector("#close").onclick = closeSheet;
