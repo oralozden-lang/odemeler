@@ -1229,14 +1229,15 @@ function backupData(){
   return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos};
 }
 function markBackedUp(){ S.lastBackup = new Date().toISOString(); persist(); render(); }
-function backupFile(){
-  const name = `odemeler-yedek-${iso(todayDate())}.json`;
-  return new File([JSON.stringify(backupData(), null, 1)], name, {type:"application/json"});
+// Android's share sheet refuses .json files, so shared backups go out as plain text (.txt); restore accepts both.
+function backupFile(ext = "json"){
+  const name = `odemeler-yedek-${iso(todayDate())}.${ext}`;
+  return new File([JSON.stringify(backupData(), null, 1)], name, {type: ext === "txt" ? "text/plain" : "application/json"});
 }
 
 function openMenu(){
   const last = S.lastBackup ? fmtLong.format(new Date(S.lastBackup)) : "hiç alınmadı";
-  const canShare = !!(navigator.canShare && navigator.canShare({files:[backupFile()]}));
+  const canShare = !!(navigator.canShare && navigator.canShare({files:[backupFile("txt")]}));
   const html = `
     <h3>Yedek</h3>
     <p class="lead">Ödemeleriniz ve şube bilgileriniz yalnızca bu telefonda saklanıyor. Telefon değişirse ya da uygulama silinirse yedek dosyasıyla geri getirirsiniz. Son yedek: <b>${esc(last)}</b>.</p>
@@ -1260,8 +1261,11 @@ function openMenu(){
     sh.querySelector("#toCats").onclick = openCats;
     const share = sh.querySelector("#share");
     if(share) share.onclick = async () => {
-      try { await navigator.share({files:[backupFile()], title:"Ödemeler yedeği"}); markBackedUp(); closeSheet(); toast("Yedek gönderildi"); }
-      catch(e){ if(e && e.name !== "AbortError"){ msg.textContent = "Paylaşılamadı. \"Yedek dosyasını indir\"i deneyin."; } }
+      try { await navigator.share({files:[backupFile("txt")]}); markBackedUp(); closeSheet(); toast("Yedek gönderildi"); }
+      catch(e){
+        if(e && e.name === "AbortError") return;  // closed the share sheet
+        msg.textContent = `Paylaşılamadı (${e && e.name || "hata"}). "Yedek dosyasını indir" ile kaydedip dosyayı OneDrive uygulamasından yükleyin.`;
+      }
     };
     sh.querySelector("#dl").onclick = () => {
       const f = backupFile(); const url = URL.createObjectURL(f);
