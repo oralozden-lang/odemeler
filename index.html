@@ -44,12 +44,14 @@ header.top .date{color:var(--muted);font-size:13px;font-weight:500;margin-top:2p
 .icon-btn svg{width:20px;height:20px}
 
 /* hero */
-.hero{background:var(--hero);color:var(--hero-ink);border-radius:22px;padding:18px 18px 16px;display:grid;gap:14px}
-.hero .row1{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.hero{background:var(--hero);color:var(--hero-ink);border-radius:18px;padding:12px 15px 11px;display:grid;gap:8px}
+.hero .row1{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:2px 10px}
+.hero .row2{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--hero-muted)}
+.hero .row2 b{color:var(--hero-ink);font-weight:700}
 .hero .lbl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--hero-muted)}
-.hero .big{font-family:var(--font-display);font-size:32px;line-height:1.05;letter-spacing:-.01em}
+.hero .big{font-family:var(--font-display);font-size:24px;line-height:1.1;letter-spacing:-.01em}
 .hero .sub{font-size:13px;color:var(--hero-muted)}
-.bar{height:8px;border-radius:99px;background:var(--hero-track);overflow:hidden}
+.bar{height:6px;border-radius:99px;background:var(--hero-track);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--hero-fill);border-radius:99px;transition:width .4s ease}
 .hero .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .hero .split div{display:grid;gap:2px}
@@ -178,8 +180,8 @@ nav.tabs button:focus-visible{outline-color:var(--hero-fill)}
 .frow-ed input{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px;font-size:15px;outline:0;min-width:0}
 .frow-ed input:focus{border-color:var(--accent);background:var(--surface)}
 .frow-ed button{border:1px solid var(--line);background:transparent;border-radius:10px;color:var(--late);font-size:20px;line-height:1}
-.est{color:var(--muted);font-weight:600}
-.hero-note{border:0;background:rgba(255,255,255,.08);color:var(--hero-muted);border-radius:12px;padding:9px 12px;font-size:13px;text-align:left}
+.hero-note{border:0;background:rgba(255,255,255,.08);color:var(--hero-muted);border-radius:10px;padding:7px 10px;font-size:12.5px;text-align:left}
+.copyamt{margin-left:8px;border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:3px 9px;font-size:12px;font-weight:800;color:var(--accent);vertical-align:1px}
 .hero-note b{color:var(--hero-fill)}
 .btn.wide{width:100%;margin-top:12px}
 .item.renew .amt small{color:var(--accent);font-weight:700}
@@ -229,7 +231,7 @@ nav.tabs button:focus-visible{outline-color:var(--hero-fill)}
 @keyframes up{from{transform:translateY(24px);opacity:0}}
 @keyframes sh{to{background-position:-200% 0}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:380px){.hero .big{font-size:27px}.item .amt{font-size:14px}}
+@media (max-width:380px){.hero .big{font-size:21px}.item .amt{font-size:13.5px}}
 </style>
 </head>
 <body>
@@ -292,7 +294,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -334,7 +336,11 @@ const daysBetween = (a,b) => Math.round((parseISO(b) - parseISO(a)) / DAY);
 // amounts are shown as plain numbers (42.000 / 1.250,50), without the ₺ sign
 const fmtFull = new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtInt = new Intl.NumberFormat("tr-TR",{maximumFractionDigits:0});
-function tl(n, exact){ if(n==null || isNaN(n)) return "—"; return (exact && n%1) ? fmtFull.format(n) : fmtInt.format(Math.round(n)); }
+// Every amount shows with two decimals (42.000,00): the figures get copied into banking apps.
+function tl(n){ if(n==null || isNaN(n)) return "—"; return fmtFull.format(n); }
+// For the clipboard: no thousands dots, comma decimals (42000,00). "42.000,00" pasted into some banking
+// apps reads as 42,00, so the copy never carries the dots.
+const plainAmount = n => Number(n).toFixed(2).replace(".", ",");
 const fmtDay = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"short",weekday:"short"});
 const fmtLong = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",year:"numeric"});
 const fmtHead = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",weekday:"long"});
@@ -350,7 +356,49 @@ function parseAmount(s){
   const n = Number(s);
   return isFinite(n) ? Math.round(n*100)/100 : NaN;
 }
-const amountInput = n => n==null ? "" : String(n).replace(".",",");
+const amountInput = n => n==null ? "" : fmtFull.format(n);
+
+/* ---------- amount inputs format themselves while typing ---------- */
+// Thousands dots appear on their own, the keyboard's "." or "," becomes the decimal comma,
+// at most two decimals. Every amount box carries data-money.
+function moneyFormat(el){
+  const prev = el.dataset.prev ?? "";
+  let v = el.value, pos = el.selectionStart ?? v.length;
+  if(v.length === prev.length - 1 && prev[pos] === "." && v === prev.slice(0, pos) + prev.slice(pos + 1)){
+    v = v.slice(0, pos - 1) + v.slice(pos); pos--;  // backspace over a thousands dot removes the digit before it
+  } else if(v.length === prev.length + 1 && v[pos - 1] === "."){
+    v = v.slice(0, pos - 1) + "," + v.slice(pos);   // a typed dot is the decimal separator
+  } else if(v.length > prev.length + 1){            // pasted: read it as an amount
+    const n = parseAmount(v);
+    if(n != null && !Number.isNaN(n)){ v = n % 1 ? fmtFull.format(n) : fmtInt.format(n); pos = v.length; }
+  }
+  const ci = v.indexOf(",");
+  const afterComma = ci >= 0 && pos > ci;
+  let ip = (ci < 0 ? v : v.slice(0, ci)).replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  const dp = ci < 0 ? null : v.slice(ci + 1).replace(/\D/g, "").slice(0, 2);
+  if(dp !== null && ip === "") ip = "0";
+  const out = ip.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (dp !== null ? "," + dp : "");
+  let caret;
+  if(afterComma) caret = out.indexOf(",") + 1 + Math.min(2, v.slice(ci + 1, pos).replace(/\D/g, "").length);
+  else {
+    let n = v.slice(0, pos).replace(/\D/g, "").length; caret = 0;
+    while(caret < out.length && n > 0 && out[caret] !== ","){ if(/\d/.test(out[caret])) n--; caret++; }
+  }
+  el.value = out; el.dataset.prev = out;
+  try { el.setSelectionRange(caret, caret); } catch(e){}
+}
+document.addEventListener("focusin", e => {
+  const el = e.target.closest && e.target.closest("input[data-money]"); if(!el) return;
+  el.dataset.prev = el.value;
+  const v = el.value;
+  // typing replaces the old figure; skipped if a key was already pressed, so a fast first digit isn't lost
+  if(v) setTimeout(() => { if(el.value === v) try { el.select(); } catch(err){} }, 0);
+});
+document.addEventListener("input", e => { if(e.target.matches && e.target.matches("input[data-money]")) moneyFormat(e.target); });
+document.addEventListener("focusout", e => {
+  const el = e.target.closest && e.target.closest("input[data-money]"); if(!el || !el.value.trim()) return;
+  const n = parseAmount(el.value); if(n != null && !Number.isNaN(n)) el.value = el.dataset.prev = fmtFull.format(n);
+});
 
 function relLabel(dateISO){
   const d = daysBetween(iso(todayDate()), dateISO);
@@ -402,17 +450,17 @@ function lastKnown(it, period){
     if(p && p.amount != null) return p.amount;
     if(m.amounts && m.amounts[it.id] != null) return m.amounts[it.id];
   }
-  return it.amount ?? null;
+  return null;
 }
-// What this item costs in a given month, and whether that figure is only an estimate.
+// What this item costs in a given month. A variable item with nothing typed in for the month has no amount
+// (no guessing from earlier months); the previous month's figure only shows as a hint while typing.
 function amountFor(it, period, paid){
   if(paid && paid.amount != null) return {v: paid.amount, est: false};
   // A figure typed in for this month wins; a fixed item only has one if it used to be variable.
   const e = enteredAmount(it, period);
   if(e != null) return {v: e, est: false};
   if(kindOf(it) === "fixed") return {v: priceAt(it, period), est: false};
-  const v = lastKnown(it, period);
-  return {v, est: v != null};
+  return {v: null, est: false};
 }
 
 /* ---------- category filter (shared by Yaklaşan, Aylık, Kalemler) ---------- */
@@ -467,7 +515,7 @@ function occurrences(period){
     }
     const paid = paidMap[it.id] || null;
     const a = amountFor(it, period, paid);
-    out.push({it, date, period, paid, amt: a.v, est: a.est && !paid});
+    out.push({it, date, period, paid, amt: a.v});
   }
   return out.sort((a,b) => a.date.localeCompare(b.date) || a.it.name.localeCompare(b.it.name,"tr"));
 }
@@ -477,10 +525,8 @@ function occRange(fromP, toP){
   return out;
 }
 const sum = arr => arr.reduce((s,o) => s + (o.amt || 0), 0);
-const estCount = arr => arr.filter(o => o.est).length;
-// A total is only approximate when it holds an estimate or leaves out an item with no amount.
-const approx = arr => arr.some(o => o.est || o.amt == null);
-const tilde = arr => approx(arr) ? "~" : "";
+// unpaid variable items whose amount for the month hasn't been typed in yet
+const missingAmounts = arr => arr.filter(o => !o.paid && o.amt == null && kindOf(o.it) === "variable");
 
 /* ---------- renewals ---------- */
 // The renewal this item is due for now (its renewal month, or the month before), unless already handled.
@@ -654,9 +700,9 @@ function toast(msg, actionLabel, action){
 }
 
 /* ---------- row ---------- */
-function amtHTML(v, est){
-  if(v == null) return '<small>Tutar yok</small>';
-  return est ? `<span class="est">~${tl(v)}</span><small>tahmini</small>` : tl(v);
+function amtHTML(v, it){
+  if(v == null) return `<small>${kindOf(it) === "variable" ? "Tutar girilmedi" : "Tutar yok"}</small>`;
+  return tl(v);
 }
 function rowHTML(o, opts = {}){
   const t = iso(todayDate());
@@ -673,7 +719,7 @@ function rowHTML(o, opts = {}){
       <span class="name">${esc(o.it.name)}</span>
       <span class="meta">${relPart}${showDate ? "<span>·</span>"+showDate : ""}<span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span>${o.it.note ? ICON.note : ""}</span>
     </button>
-    <div class="amt num">${amtHTML(o.amt, o.est)}</div>
+    <div class="amt num">${amtHTML(o.amt, o.it)}</div>
   </div>`;
 }
 function sectionHTML(title, list, opts = {}){
@@ -681,7 +727,7 @@ function sectionHTML(title, list, opts = {}){
   const open = list.filter(o => !o.paid);
   const total = sum(open);
   return `<section class="section ${opts.cls||""}">
-    <div class="sec-head"><h2>${esc(title)} <span class="count">${open.length}${list.length!==open.length?"/"+list.length:""}</span></h2>${total ? `<span class="sum num">${tilde(open)}${tl(total)}</span>` : ""}</div>
+    <div class="sec-head"><h2>${esc(title)} <span class="count">${open.length}${list.length!==open.length?"/"+list.length:""}</span></h2>${total ? `<span class="sum num">${tl(total)}</span>` : ""}</div>
     <div class="list">${list.length ? list.map(o => rowHTML(o, opts)).join("") : `<div class="empty-line">${esc(opts.emptyText||"Ödeme yok.")}</div>`}</div>
   </section>`;
 }
@@ -693,18 +739,14 @@ function heroHTML(period){
   const paid = occ.filter(o => o.paid);
   const paidSum = sum(paid);
   const left = Math.max(0, total - paidSum);
-  const est = estCount(occ);
+  const missing = missingAmounts(occ).length;
   const pct = total ? Math.round(paidSum / total * 100) : 0;
   const [y,m] = period.split("-").map(Number);
   return `<div class="hero">
-    <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan${S.catSel.length ? " · filtreli" : ""}</span><span class="sub num">%${pct} ödendi</span></div>
-    <div class="big num">${tilde(occ.filter(o => !o.paid))}${tl(left)}</div>
+    <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan${S.catSel.length ? " · filtreli" : ""}</span><span class="big num">${tl(left)}</span></div>
     <div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>
-    <div class="split">
-      <div><span class="sub">Ödenen · ${paid.length} kalem</span><b class="num">${tl(paidSum)}</b></div>
-      <div><span class="sub">Ay toplamı · ${occ.length} kalem</span><b class="num">${tilde(occ)}${tl(total)}</b></div>
-    </div>
-    ${est ? `<button class="hero-note" type="button" data-act="amounts" data-period="${period}">${est} kalemin tutarı geçen aydan tahmini · <b>Tutarları gir</b></button>` : ""}
+    <div class="row2 num"><span>Ödenen <b>${tl(paidSum)}</b></span><span>Toplam <b>${tl(total)}</b></span><span>%${pct}</span></div>
+    ${missing ? `<button class="hero-note" type="button" data-act="amounts" data-period="${period}">${missing} kalemin tutarı girilmedi · <b>Tutarları gir</b></button>` : ""}
   </div>`;
 }
 
@@ -740,7 +782,7 @@ function viewAjanda(){
   const soon = all.filter(o => { const d = daysBetween(t,o.date); return d>=8 && d<=30 && !o.paid; });
   let h = filterBarHTML() + heroHTML(cp);
   if(hiddenLate.length) h += `<button class="alert soft" type="button" data-act="filter-clear">${ICON.alert}<span class="grow">Filtre dışında ${hiddenLate.length} geciken ödeme var</span><b>Göster</b></button>`;
-  if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tilde(late)}${tl(sum(late))}</span></button>`;
+  if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tl(sum(late))}</span></button>`;
   h += sectionHTML("Gecikenler", late, {cls:"sec-late"});
   h += renewalsHTML();
   h += sectionHTML("Bugün", today, {showEmpty:true, hideDate:true, emptyText:"Bugün vadesi gelen ödeme yok."});
@@ -773,7 +815,7 @@ function viewAy(){
   const groups = new Map();
   for(const o of shown){ if(!groups.has(o.date)) groups.set(o.date, []); groups.get(o.date).push(o); }
   for(const [date, list] of groups){
-    h += `<section class="section"><div class="day-head${date===t?" today":""}"><span>${esc(fd(fmtHead, date))}${date===t?" · Bugün":""}</span><span class="num">${tilde(list)}${tl(sum(list))}</span></div>
+    h += `<section class="section"><div class="day-head${date===t?" today":""}"><span>${esc(fd(fmtHead, date))}${date===t?" · Bugün":""}</span><span class="num">${tl(sum(list))}</span></div>
       <div class="list">${list.map(o => rowHTML(o,{hideDate:true})).join("")}</div></section>`;
   }
   return h;
@@ -792,19 +834,19 @@ function viewKalemler(){
   ${filterBarHTML()}
   <div class="stat-row">
     <div class="stat"><span>Sabit · değişken</span><b class="num">${fixedN} · ${varN} kalem</b></div>
-    <div class="stat"><span>${ML[Number(cp.slice(5))-1]} toplamı</span><b class="num">${tilde(occ)}${tl(sum(occ))}</b></div>
+    <div class="stat"><span>${ML[Number(cp.slice(5))-1]} toplamı</span><b class="num">${tl(sum(occ))}</b></div>
   </div>`;
   if(!list.length){ h += `<div class="state"><h2>Sonuç yok</h2>Aramayı veya kategoriyi değiştirin.</div>`; return h; }
   h += `<section class="section"><div class="list">` + list.map(i => {
     const c = catOf(i), k = kindOf(i);
-    const a = i.once ? {v: i.amount, est:false} : amountFor(i, cp, null);
+    const a = i.once ? {v: i.amount} : amountFor(i, cp, null);
     const extra = i.once ? "" : `<span>${k === "fixed" ? "Sabit" : "Değişken"}${i.renewMonth && k === "fixed" ? " · yenileme " + ML[i.renewMonth-1] : ""}</span>`;
     return `<div class="item" data-id="${esc(i.id)}">
       <button class="main" type="button" data-act="edit">
         <span class="name">${esc(i.name)}</span>
         <span class="meta"><span>${esc(freqLabel(i))}</span>${extra}<span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span>${i.note?ICON.note:""}</span>
       </button>
-      <div class="amt num">${amtHTML(a.v, a.est)}</div>
+      <div class="amt num">${amtHTML(a.v, i)}</div>
     </div>`;
   }).join("") + `</div></section>`;
   return h;
@@ -921,8 +963,8 @@ function quickToggle(id, period){
     setPaid(period, id, null);
     toast(`${o.it.name} bekleyenlere alındı`, "Geri al", () => setPaid(period, id, prev));
   } else {
-    // amount unknown or only an estimate: ask for the real figure first
-    if(o.amt == null || o.est){ openDetail(id, period, true); return; }
+    // no amount for this month yet: ask for it first
+    if(o.amt == null){ openDetail(id, period, true); return; }
     setPaid(period, id, {at: iso(todayDate()), amount: o.amt});
     toast(`${o.it.name} ödendi`, "Geri al", () => setPaid(period, id, null));
   }
@@ -1036,23 +1078,24 @@ function openDetail(id, period, focusAmount){
   const o = findOcc(id, period); if(!o) return;
   const it = o.it, c = catOf(it), k = kindOf(it);
   const entered = enteredAmount(it, period);
+  const prevAmt = lastKnown(it, period);
   const html = `
     <h3>${esc(it.name)}</h3>
     <p class="lead"><span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))} · ${k === "fixed" ? "Sabit tutar" : "Her ay değişir"}</p>
     <dl class="kv">
       <dt>Vade</dt><dd>${esc(fd(fmtHead, o.date))}</dd>
       <dt>Durum</dt><dd style="color:${o.paid?"var(--ok)":(o.date<iso(todayDate())?"var(--late)":"inherit")}">${o.paid ? "Ödendi" : esc(relLabel(o.date))}</dd>
-      <dt>Bu ayın tutarı</dt><dd class="num">${o.amt == null ? "—" : (o.est ? "~" + tl(o.amt, true) + " (tahmini)" : tl(o.amt, true))}</dd>
+      <dt>Bu ayın tutarı</dt><dd class="num">${o.amt == null ? "Girilmedi" : tl(o.amt) + `<button class="copyamt" type="button" id="copyAmt" aria-label="Tutarı kopyala">Kopyala</button>`}</dd>
     </dl>
     ${it.note ? `<div class="notebox">${esc(it.note)}</div>` : ""}
     ${o.paid ? `
-      <div class="paidbox">${ICON.check}<span>${esc(fd(fmtLong, o.paid.at))} tarihinde ödendi${o.paid.amount!=null?" · "+tl(o.paid.amount,true):""}</span></div>
+      <div class="paidbox">${ICON.check}<span>${esc(fd(fmtLong, o.paid.at))} tarihinde ödendi${o.paid.amount!=null?" · "+tl(o.paid.amount):""}</span></div>
       <div class="btns">
         <button class="btn" type="button" id="unpay">Ödenmedi olarak geri al</button>
         <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
       </div>` : `
       <div class="two">
-        <div class="field"><label for="pAmt">${k === "variable" ? "Bu ayın tutarı (₺)" : "Ödenen tutar (₺)"}</label><input id="pAmt" inputmode="decimal" placeholder="${o.amt!=null?"~"+esc(amountInput(o.amt)):"Örn. 92.500"}" value="${esc(amountInput(k === "variable" ? entered : o.amt))}" ${focusAmount?"autofocus":""}></div>
+        <div class="field"><label for="pAmt">${k === "variable" ? "Bu ayın tutarı (₺)" : "Ödenen tutar (₺)"}</label><input id="pAmt" data-money inputmode="decimal" placeholder="${k === "variable" && prevAmt != null ? "Geçen ay " + esc(tl(prevAmt)) : "Örn. 92.500,00"}" value="${esc(amountInput(k === "variable" ? entered : o.amt))}" ${focusAmount?"autofocus":""}></div>
         <div class="field"><label for="pAt">Ödeme tarihi</label><input id="pAt" type="date" value="${iso(todayDate())}"></div>
       </div>
       <p class="err" id="pErr"></p>
@@ -1063,6 +1106,12 @@ function openDetail(id, period, focusAmount){
       </div>`}`;
   openSheet(html, sh => {
     sh.querySelector("#edit").onclick = () => openEditor(id);
+    const cp = sh.querySelector("#copyAmt");
+    if(cp) cp.onclick = async () => {
+      const txt = plainAmount(o.amt);
+      try { await navigator.clipboard.writeText(txt); cp.textContent = "Kopyalandı"; toast(`Kopyalandı: ${txt}`); setTimeout(() => cp.textContent = "Kopyala", 2000); }
+      catch(e){ toast("Kopyalanamadı. Tutara uzun basıp seçerek kopyalayın."); }
+    };
     const un = sh.querySelector("#unpay");
     if(un) un.onclick = () => { const prev = o.paid; closeSheet(); setPaid(period, id, null); toast(`${it.name} bekleyenlere alındı`, "Geri al", () => setPaid(period, id, prev)); };
     const readAmt = () => {
@@ -1072,21 +1121,11 @@ function openDetail(id, period, focusAmount){
       return v;
     };
     const pay = sh.querySelector("#pay");
-    if(pay) sh.querySelector("#pAmt").addEventListener("input", () => {
-      if(pay.dataset.confirm){ delete pay.dataset.confirm; pay.textContent = "Ödendi olarak işaretle"; sh.querySelector("#pErr").textContent = ""; }
-    });
     if(pay) pay.onclick = () => {
       let v = readAmt(); if(v === undefined) return;
       const typed = v != null;
-      if(!typed && o.est && pay.dataset.confirm !== "1"){
-        // the figure on screen is only a guess from an earlier month: don't record it as paid without a yes
-        pay.dataset.confirm = "1";
-        sh.querySelector("#pErr").textContent = `Tutar yazılmadı. Tahmini ~${tl(o.amt, true)} ödenmiş sayılacak. Doğruysa tekrar dokunun, değilse gerçek tutarı yazın.`;
-        pay.textContent = `~${tl(o.amt)} ile ödendi olarak işaretle`;
-        sh.querySelector("#pAmt").focus();
-        return;
-      }
-      if(!typed) v = o.amt;  // left empty: use the shown figure (a guess only after the confirmation above)
+      if(!typed) v = o.amt;  // left empty: the item's own amount for the month
+      if(v == null){ sh.querySelector("#pErr").textContent = "Ödenen tutarı yazın."; sh.querySelector("#pAmt").focus(); return; }
       const at = sh.querySelector("#pAt").value || iso(todayDate());
       if(k === "variable" && typed) setAmounts(period, {[id]: v});
       closeSheet();
@@ -1097,7 +1136,7 @@ function openDetail(id, period, focusAmount){
     if(sa) sa.onclick = () => {
       const v = readAmt(); if(v === undefined) return;
       if(!setAmounts(period, {[id]: v})) return;
-      closeSheet(); render(); toast(v == null ? "Tutar silindi, tahmin kullanılacak" : `${it.name}: ${tl(v, true)} kaydedildi`);
+      closeSheet(); render(); toast(v == null ? "Tutar silindi" : `${it.name}: ${tl(v)} kaydedildi`);
     };
   });
 }
@@ -1108,12 +1147,12 @@ function openAmounts(period){
   if(!list.length){ toast("Bu ay girilecek değişken tutar yok"); return; }
   const html = `
     <h3>${ML[m-1]} ${y} tutarları</h3>
-    <p class="lead">Ekstre veya tahakkuk gelen kalemlerin tutarını yazın. Boş bıraktıklarınız geçen aydan tahmini görünmeye devam eder.</p>
+    <p class="lead">Ekstre veya tahakkuk gelen kalemlerin tutarını yazın. Boş bıraktıklarınız "Tutar girilmedi" olarak kalır ve toplamlara girmez.</p>
     <div id="amtList">${list.map(o => {
       const e = enteredAmount(o.it, period);
-      const est = lastKnown(o.it, period);
-      return `<div class="amt-row"><label for="a_${esc(o.it.id)}"><b>${esc(o.it.name)}</b><span>${esc(fd(fmtDay, o.date))} · ${esc(catOf(o.it).label)}</span></label>
-        <input id="a_${esc(o.it.id)}" data-id="${esc(o.it.id)}" inputmode="decimal" placeholder="${est!=null?"~"+esc(amountInput(est)):"Tutar"}" value="${esc(amountInput(e))}"></div>`;
+      const prevAmt = lastKnown(o.it, period);
+      return `<div class="amt-row"><label for="a_${esc(o.it.id)}"><b>${esc(o.it.name)}</b><span>${esc(fd(fmtDay, o.date))} · ${esc(catOf(o.it).label)}${prevAmt != null ? " · geçen ay " + esc(tl(prevAmt)) : ""}</span></label>
+        <input id="a_${esc(o.it.id)}" data-id="${esc(o.it.id)}" data-money inputmode="decimal" placeholder="Tutar" value="${esc(amountInput(e))}"></div>`;
     }).join("")}</div>
     <p class="err" id="aErr"></p>
     <div class="btns">
@@ -1143,9 +1182,9 @@ function openRenewal(id, key){
   const cur = priceAt(it, key);
   const html = `
     <h3>${esc(it.name)}</h3>
-    <p class="lead">${ML[m-1]} ${y} yenilemesi. Şu anki tutar <b>${tl(cur, true)}</b>. Yeni tutar, seçtiğiniz aydan itibaren geçerli olur; önceki aylar değişmez.</p>
+    <p class="lead">${ML[m-1]} ${y} yenilemesi. Şu anki tutar <b>${tl(cur)}</b>. Yeni tutar, seçtiğiniz aydan itibaren geçerli olur; önceki aylar değişmez.</p>
     <div class="two">
-      <div class="field"><label for="rAmt">Yeni tutar (₺)</label><input id="rAmt" inputmode="decimal" value="${esc(amountInput(cur))}" autofocus></div>
+      <div class="field"><label for="rAmt">Yeni tutar (₺)</label><input id="rAmt" data-money inputmode="decimal" value="${esc(amountInput(cur))}" autofocus></div>
       <div class="field"><label for="rFrom">Hangi aydan itibaren</label><input id="rFrom" type="month" value="${key}"></div>
     </div>
     <p class="err" id="rErr"></p>
@@ -1166,7 +1205,7 @@ function openRenewal(id, key){
       if(v == null || Number.isNaN(v)){ sh.querySelector("#rErr").textContent = "Yeni tutarı rakamla yazın."; return; }
       const prices = setPriceFrom(it.prices || [], from, v);
       updateItem(id, {prices, amount: v, renewDone: [...(it.renewDone||[]), key]});
-      closeSheet(); render(); toast(`${it.name}: ${tl(v, true)}, ${ML[Number(from.slice(5))-1]} ${from.slice(0,4)}'ten itibaren`);
+      closeSheet(); render(); toast(`${it.name}: ${tl(v)}, ${ML[Number(from.slice(5))-1]} ${from.slice(0,4)}'ten itibaren`);
     };
   });
 }
@@ -1190,7 +1229,7 @@ function openEditor(id){
         <div class="field" id="kindWrap"><label for="fKind">Tutar</label><select id="fKind"><option value="fixed" ${startKind==="fixed"?"selected":""}>Sabit tutar</option><option value="variable" ${startKind==="variable"?"selected":""}>Her ay değişir</option></select></div>
       </div>
       <div class="two">
-        <div class="field"><label for="fAmt" id="fAmtL">Tutar (₺)</label><input id="fAmt" inputmode="decimal" value="${esc(amountInput(curAmount))}" placeholder="Boş bırakılabilir"></div>
+        <div class="field" id="amtWrap"><label for="fAmt" id="fAmtL">Tutar (₺)</label><input id="fAmt" data-money inputmode="decimal" value="${esc(amountInput(curAmount))}" placeholder="Boş bırakılabilir"></div>
         <div class="field" id="fromWrap"><label for="fFrom">Yeni tutar hangi aydan?</label><input id="fFrom" type="month" value="${cp}"></div>
       </div>
       <div class="field"><label for="fMode">Ne sıklıkla?</label>
@@ -1230,7 +1269,8 @@ function openEditor(id){
       sh.querySelector("#onceWrap").style.display = m === "once" ? "" : "none";
       sh.querySelector("#kindWrap").style.display = m === "once" ? "none" : "";
       sh.querySelector("#renewWrap").style.visibility = fixed && m !== "once" ? "visible" : "hidden";
-      sh.querySelector("#fAmtL").textContent = fixed ? "Tutar (₺)" : "Tahmini tutar (₺)";
+      // a variable item's amount is typed in month by month, so it has no amount of its own
+      sh.querySelector("#amtWrap").style.display = fixed ? "" : "none";
       const changed = it && fixed && m !== "once" && (kindOf(it) !== "fixed" || parseAmount(amtIn.value) !== curAmount);
       sh.querySelector("#fromWrap").style.visibility = changed ? "visible" : "hidden";
     };
@@ -1267,8 +1307,8 @@ function openEditor(id){
       ev.preventDefault();
       const err = sh.querySelector("#fErr");
       const name = sh.querySelector("#fName").value.trim();
-      const amount = parseAmount(amtIn.value);
       const mode = modeSel.value;
+      const amount = (mode === "once" || kindSel.value === "fixed") ? parseAmount(amtIn.value) : null;
       if(!name){ err.textContent = "Ödemeye bir ad verin."; return; }
       if(Number.isNaN(amount)){ err.textContent = "Tutarı rakamla yazın, örneğin 92.500,50."; return; }
       const base = it ? {...it} : {created: Date.now()};
@@ -1305,7 +1345,7 @@ function openEditor(id){
           data.prices = prices; data.amount = amount;
         } else {
           // price history is kept (unused while variable) so switching back to fixed does not lose it
-          data.amount = amount; delete data.renewMonth;
+          delete data.amount; delete data.renewMonth;
         }
       }
       const btn = sh.querySelector("#save"); btn.disabled = true;
