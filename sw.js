@@ -1,6 +1,6 @@
 // Ödemeler service worker: keeps the app usable offline.
 // Bump VERSION whenever index.html, sw.js or the icons change: that is what tells an open app a new version is ready.
-const VERSION = "odemeler-v14";
+const VERSION = "odemeler-v15";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"];
 const PAGE = "index.html";
 const NET_WAIT = 3500;  // on a weak connection, show the saved copy after this many ms rather than a blank screen
