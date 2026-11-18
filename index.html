@@ -164,6 +164,10 @@ nav.tabs button:focus-visible{outline-color:var(--hero-fill)}
 .group-h{font-family:var(--font-display);font-size:15px;color:var(--muted);margin:22px 4px 8px;display:flex;justify-content:space-between;align-items:baseline}
 .group-h span{font-family:var(--font-body);font-size:12px;font-weight:700}
 .icards{display:grid;gap:10px}
+.paybox{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:8px 12px 2px;margin:0 0 12px}
+.paybox .pbh{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
+.paybox .pbh + .brow{border-top:0}
+.field label .opt{font-weight:600;color:var(--muted);font-size:11.5px;margin-left:4px}
 .cobox{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 14px;margin-bottom:12px}
 .cobox span{display:grid;gap:1px;min-width:0}
 .cobox b{font-size:14.5px;overflow-wrap:anywhere}
@@ -324,7 +328,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 13;
+const APP_VERSION = 14;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -371,6 +375,16 @@ function tl(n){ if(n==null || isNaN(n)) return "—"; return fmtFull.format(n); 
 // For the clipboard: no thousands dots, comma decimals (42000,00). "42.000,00" pasted into some banking
 // apps reads as 42,00, so the copy never carries the dots.
 const plainAmount = n => Number(n).toFixed(2).replace(".", ",");
+// IBAN is stored compact (TR330006100519786457841326) and shown in groups of four.
+const normIban = v => String(v ?? "").replace(/\s+/g, "").toUpperCase();
+const fmtIban = v => normIban(v).replace(/(.{4})/g, "$1 ").trim();
+function ibanOk(v){
+  const s = normIban(v);
+  if(!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(s) || (s.startsWith("TR") && s.length !== 26)) return false;
+  const digits = (s.slice(4) + s.slice(0, 4)).replace(/[A-Z]/g, c => String(c.charCodeAt(0) - 55));
+  let r = 0; for(const ch of digits) r = (r * 10 + Number(ch)) % 97;
+  return r === 1;
+}
 const fmtDay = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"short",weekday:"short"});
 const fmtLong = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",year:"numeric"});
 const fmtHead = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",weekday:"long"});
@@ -586,6 +600,8 @@ function cleanItem(raw){
   it.name = String(it.name ?? "").trim() || "Adsız kalem";
   it.cat = String(it.cat ?? "");
   it.note = String(it.note ?? "");
+  if(it.payee != null) it.payee = String(it.payee);
+  if(it.iban != null) it.iban = normIban(it.iban);
   it.once = it.once ? String(it.once) : null;
   const day = Math.round(Number(it.day));
   it.day = Number.isFinite(day) ? Math.min(31, Math.max(1, day)) : (it.once && isDate(it.once) ? Number(it.once.slice(8)) : 1);
@@ -1290,6 +1306,11 @@ function openDetail(id, period, focusAmount){
       <dt>Durum</dt><dd style="color:${o.paid?"var(--ok)":(o.date<iso(todayDate())?"var(--late)":"inherit")}">${o.paid ? "Ödendi" : esc(relLabel(o.date))}</dd>
       <dt>Bu ayın tutarı</dt><dd class="num">${o.amt == null ? "Girilmedi" : tl(o.amt) + `<button class="copyamt" type="button" id="copyAmt" aria-label="Tutarı kopyala">Kopyala</button>`}</dd>
     </dl>
+    ${(it.payee || it.iban) ? (() => {
+      const share = [it.payee && `Hesap sahibi: ${it.payee}`, it.iban && `IBAN: ${fmtIban(it.iban)}`].filter(Boolean).join("\n");
+      const row = (l, shown, copy) => `<div class="brow"><div class="bv"><span>${l}</span><b>${esc(shown)}</b></div>${actBtns(copy, share)}</div>`;
+      return `<div class="paybox"><div class="pbh">Havale bilgileri</div>${it.payee ? row("Hesap sahibi", it.payee, it.payee) : ""}${it.iban ? row("IBAN", fmtIban(it.iban), normIban(it.iban)) : ""}</div>`;
+    })() : ""}
     ${it.note ? `<div class="notebox">${esc(it.note)}</div>` : ""}
     ${o.paid ? `
       <div class="paidbox">${ICON.check}<span>${esc(fd(fmtLong, o.paid.at))} tarihinde ödendi${o.paid.amount!=null?" · "+tl(o.paid.amount):""}</span></div>
@@ -1309,6 +1330,10 @@ function openDetail(id, period, focusAmount){
       </div>`}`;
   openSheet(html, sh => {
     sh.querySelector("#edit").onclick = () => openEditor(id);
+    sh.addEventListener("click", e => {
+      const b = e.target.closest('.paybox [data-act="copy"], .paybox [data-act="share"]'); if(!b) return;
+      (b.dataset.act === "copy" ? copyValue : shareValue)(b.dataset.v);
+    });
     const cp = sh.querySelector("#copyAmt");
     if(cp) cp.onclick = async () => {
       const txt = plainAmount(o.amt);
@@ -1453,6 +1478,8 @@ function openEditor(id){
         </div>
       </div>
       <div class="field" id="onceWrap"><label for="fOnce">Ödeme tarihi</label><input id="fOnce" type="date" value="${esc(it&&it.once?it.once:"")}"></div>
+      <div class="field"><label for="fPayee">Hesap sahibi <small class="opt">isteğe bağlı</small></label><input id="fPayee" value="${esc(it&&it.payee||"")}" placeholder="Havale/EFT için alıcı adı" autocomplete="off"></div>
+      <div class="field"><label for="fIban">IBAN <small class="opt">isteğe bağlı</small></label><input id="fIban" value="${esc(it&&it.iban?fmtIban(it.iban):"")}" placeholder="TR00 0000 0000 0000 0000 0000 00" autocapitalize="characters" autocomplete="off" spellcheck="false"></div>
       <div class="field"><label for="fNote">Not</label><textarea id="fNote" placeholder="İsteğe bağlı">${esc(it?it.note||"":"")}</textarea></div>
       <p class="err" id="fErr"></p>
       <div class="btns">
@@ -1517,6 +1544,17 @@ function openEditor(id){
       const base = it ? {...it} : {created: Date.now()};
       delete base.id;
       const data = {...base, name, cat: sh.querySelector("#fCat").value, note: sh.querySelector("#fNote").value.trim()};
+      const payee = sh.querySelector("#fPayee").value.trim(), iban = normIban(sh.querySelector("#fIban").value);
+      const saveBtn = sh.querySelector("#save");
+      if(iban && !ibanOk(iban) && saveBtn.dataset.ibanOk !== iban){
+        // a typo in an IBAN sends money to the wrong place or bounces: point it out, but let a second tap save it
+        saveBtn.dataset.ibanOk = iban;
+        err.textContent = "IBAN hatalı görünüyor (TR ile başlayan 26 karakter olmalı). Kontrol edin; yine de kaydetmek için tekrar dokunun.";
+        sh.querySelector("#fIban").focus();
+        return;
+      }
+      if(payee) data.payee = payee; else delete data.payee;
+      if(iban) data.iban = iban; else delete data.iban;
       if(mode === "once"){
         const d = sh.querySelector("#fOnce").value;
         if(!d){ err.textContent = "Ödeme tarihini seçin."; return; }
