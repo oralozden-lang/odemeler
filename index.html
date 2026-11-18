@@ -164,6 +164,36 @@ nav.tabs button:focus-visible{outline-color:var(--hero-fill)}
 .group-h{font-family:var(--font-display);font-size:15px;color:var(--muted);margin:22px 4px 8px;display:flex;justify-content:space-between;align-items:baseline}
 .group-h span{font-family:var(--font-body);font-size:12px;font-weight:700}
 .icards{display:grid;gap:10px}
+.cobox{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 14px;margin-bottom:12px}
+.cobox span{display:grid;gap:1px;min-width:0}
+.cobox b{font-size:14.5px;overflow-wrap:anywhere}
+.cobox small{font-size:12.5px;color:var(--muted);font-weight:600}
+.cobox em{font-style:normal;font-size:12.5px;font-weight:800;color:var(--accent);flex:none}
+.brbar{display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0}
+.brbar .btn{padding:0 14px}
+.brsel{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--accent);border-radius:14px;padding:0 6px 0 12px;height:48px;min-width:0}
+.brsel span{font-size:12.5px;font-weight:700;color:var(--muted);flex:none}
+.brsel select{flex:1;min-width:0;border:0;background:transparent;font-weight:800;font-size:16px;height:100%;outline:0}
+.brcard,.invcard{margin-bottom:12px}
+.brow{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding:8px 0}
+.brow:first-of-type{border-top:0}
+.bv{flex:1;min-width:0;display:grid;gap:1px}
+.bv span{font-size:12px;color:var(--muted);font-weight:600}
+.bv b{font-size:15px;font-weight:700;overflow-wrap:anywhere;white-space:pre-wrap;font-variant-numeric:tabular-nums}
+.ract{display:flex;gap:4px;flex:none}
+.rbtn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);color:var(--accent);display:grid;place-items:center;padding:0}
+.rbtn svg{width:18px;height:18px}
+.rbtn:active{background:var(--accent-soft)}
+.invtext{margin:0 0 10px;font:600 14px/1.5 var(--font-body);white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.two-btn{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.two-btn .btn{display:flex;align-items:center;justify-content:center;gap:6px}
+.two-btn svg{width:18px;height:18px}
+.fld-row{display:grid;grid-template-columns:1fr 36px 36px 36px;gap:6px;align-items:center;margin-bottom:8px}
+.fld-row input{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:9px;font-size:15px;outline:0;min-width:0}
+.fld-row button{height:36px;border:1px solid var(--line);background:transparent;border-radius:10px;font-size:16px;color:var(--muted)}
+.fld-row button:disabled{opacity:.35}
+.fld-row .x{color:var(--late);font-size:20px}
+.fld-lock{text-align:center;color:var(--line)}
 .icard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:12px 14px 6px}
 .icard header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}
 .icard h3{font-family:var(--font-display);font-size:17px;margin:0;text-wrap:balance}
@@ -294,7 +324,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -313,7 +343,7 @@ const ICON = {
 
 /* ---------- state ---------- */
 const S = {
-  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], iq:"", lastBackup:null, failed:null, badRaw:null,
+  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], sube:null, iq:"", lastBackup:null, failed:null, badRaw:null,
   tab:"ajanda", cursor:null, monthFilter:"all", q:"", catSel:loadCatSel(), filterOpen:false
 };
 
@@ -626,7 +656,8 @@ function load(){
     const d = JSON.parse(raw);
     const r = migrate(d);
     S.items = r.items; S.months = r.months; S.cats = r.cats;
-    S.infos = cleanInfos(d.infos);
+    S.infos = cleanInfos(d.infos);  // the old free-form cards: no longer shown, kept so nothing is thrown away
+    S.sube = cleanSube(d.sube);
     S.lastBackup = typeof d.lastBackup === "string" ? d.lastBackup : null;
     if((d.schema || 1) < SCHEMA){
       // keep the pre-upgrade copy once, in case the upgrade gets something wrong
@@ -646,7 +677,7 @@ function persist(){
     return false;
   }
   try {
-    localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, lastBackup:S.lastBackup}));
+    localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, lastBackup:S.lastBackup}));
     return true;
   } catch(e){
     toast("Kaydedilemedi: telefonda yer kalmamış olabilir. Hemen yedek alın.");
@@ -852,76 +883,233 @@ function viewKalemler(){
   return h;
 }
 
-/* ---------- bilgiler ---------- */
-const GROUPS = {genel:"Genel", sube:"Şubeler"};
+/* ---------- bilgiler: şirket + şubeler ---------- */
+// One company (invoice title, tax office, tax number) shared by every branch; each branch fills the same
+// list of fields. The field list itself can be extended, renamed, reordered; a new field shows in every branch.
+// Fields with a special role, by id: "ad" names the branch (always present), "adres" goes into the invoice
+// block, "tel" gets a call button.
+const DEFAULT_FIELDS = [
+  {id:"ad", label:"Şube adı"}, {id:"adres", label:"Adres"}, {id:"kod", label:"Şube kodu"}, {id:"tel", label:"Telefon"},
+  {id:"ticsicil", label:"Ticaret sicil no"}, {id:"elektrik", label:"Elektrik abone no"}, {id:"su", label:"Su abone no"},
+  {id:"dogalgaz", label:"Doğalgaz abone no"}, {id:"sgk", label:"SGK sicil no"}
+];
+const emptySube = () => ({company:{name:"", taxOffice:"", taxNo:""}, fields: DEFAULT_FIELDS.map(f => ({...f})), branches: [], sel: null});
+function cleanSube(d){
+  const out = emptySube();
+  if(!isObj(d)) return out;
+  if(isObj(d.company)) out.company = {name: String(d.company.name ?? ""), taxOffice: String(d.company.taxOffice ?? ""), taxNo: String(d.company.taxNo ?? "")};
+  if(Array.isArray(d.fields)){
+    const seen = new Set();
+    const fs = d.fields.filter(isObj).map(f => ({id: String(f.id ?? ""), label: String(f.label ?? "").trim()})).filter(f => f.id && f.label && !seen.has(f.id) && seen.add(f.id));
+    if(!fs.some(f => f.id === "ad")) fs.unshift({id:"ad", label:"Şube adı"});
+    out.fields = fs;
+  }
+  if(Array.isArray(d.branches)) out.branches = d.branches.filter(isObj).map(b => {
+    const v = {};
+    if(isObj(b.v)) for(const [k, x] of Object.entries(b.v)) if(x != null && String(x) !== "") v[k] = String(x);
+    return {id: String(b.id ?? "") || newId(), v, note: String(b.note ?? "")};
+  }).filter(b => b.v.ad);
+  out.sel = typeof d.sel === "string" ? d.sel : null;
+  return out;
+}
+const brName = b => b.v.ad || "Adsız şube";
+const sortedBranches = () => [...S.sube.branches].sort((a,b) => brName(a).localeCompare(brName(b), "tr"));
+function selBranch(){
+  const list = S.sube.branches;
+  return list.find(b => b.id === S.sube.sel) || sortedBranches()[0] || null;
+}
+function invoiceText(b){
+  const c = S.sube.company, lines = [];
+  if(c.name) lines.push(c.name);
+  const tax = [c.taxOffice && `Vergi Dairesi: ${c.taxOffice}`, c.taxNo && `VKN: ${c.taxNo}`].filter(Boolean).join(" · ");
+  if(tax) lines.push(tax);
+  if(b && b.v.adres) lines.push(`Adres: ${b.v.adres}`);
+  return lines.join("\n");
+}
+const IC2 = {
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1"/></svg>',
+  call:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>'
+};
+const telHref = v => "tel:" + String(v).replace(/[^\d+]/g, "");
+function actBtns(copyText, shareText, tel){
+  return `<span class="ract">${tel ? `<a class="rbtn" href="${esc(telHref(tel))}" aria-label="Ara">${IC2.call}</a>` : ""}<button class="rbtn" type="button" data-act="copy" data-v="${esc(copyText)}" aria-label="Kopyala">${IC2.copy}</button><button class="rbtn" type="button" data-act="share" data-v="${esc(shareText)}" aria-label="Paylaş">${IC2.share}</button></span>`;
+}
 function viewBilgiler(){
+  const c = S.sube.company, list = sortedBranches();
   const q = S.iq.trim().toLocaleLowerCase("tr");
-  const match = c => !q || [c.title, c.note, ...(c.fields||[]).flatMap(f => [f.l, f.v])].join(" ").toLocaleLowerCase("tr").includes(q);
-  let h = `<label class="search" for="iq">${ICON.search}<input id="iq" type="search" placeholder="Şube, sicil no, adres ara" value="${esc(S.iq)}" autocomplete="off"></label>`;
-  if(!S.infos.length){
-    return h + `<div class="state"><h2>Henüz bilgi yok</h2>Hazırladığım bilgi dosyasını ⋯ menüsünden "Yedekten geri yükle" ile ekleyin ya da + ile kart oluşturun.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="backup">Bilgi dosyasını yükle</button></div></div>`;
+  let h = `<button class="cobox" type="button" data-act="co-edit">${c.name
+    ? `<span><b>${esc(c.name)}</b><small>${esc([c.taxOffice, c.taxNo && "VKN " + c.taxNo].filter(Boolean).join(" · ") || "Vergi bilgisi girilmedi")}</small></span>`
+    : `<span><b>Şirket fatura bilgileri</b><small>Unvan, vergi dairesi ve vergi numarasını ekleyin</small></span>`}<em>Düzenle</em></button>`;
+  if(!list.length){
+    return h + `<div class="state"><h2>Henüz şube yok</h2>İlk şubeyi ekleyin; bilgileri tek dokunuşla kopyalayıp paylaşabilirsiniz.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="br-new">Şube ekle</button></div></div>`;
   }
-  let any = false;
-  for(const [g, label] of Object.entries(GROUPS)){
-    const list = S.infos.filter(c => (c.group||"sube") === g && match(c)).sort((a,b) => (a.order??999)-(b.order??999) || a.title.localeCompare(b.title,"tr"));
-    if(!list.length) continue;
-    any = true;
-    h += `<h2 class="group-h">${label}<span>${list.length}</span></h2><div class="icards">` + list.map(c => `
-      <article class="icard">
-        <header><h3>${esc(c.title)}</h3><button class="ed" type="button" data-act="info-edit" data-id="${esc(c.id)}">Düzenle</button></header>
-        <dl>${(c.fields||[]).filter(f => f.v).map(f => `<div class="frow"><dt>${esc(f.l)}</dt><dd><button class="copy" type="button" data-act="copy" data-v="${esc(f.v)}" aria-label="${esc(f.l)} kopyala">${esc(f.v)}</button></dd></div>`).join("")}</dl>
-        ${c.note ? `<div class="inote">${esc(c.note)}</div>` : ""}
-      </article>`).join("") + `</div>`;
+  h += `<label class="search" for="iq">${ICON.search}<input id="iq" type="search" placeholder="Şubelerde ara: ad, adres, abone no…" value="${esc(S.iq)}" autocomplete="off"></label>`;
+  if(q){
+    const hits = [];
+    for(const b of list){
+      const f = S.sube.fields.find(f => String(b.v[f.id] || "").toLocaleLowerCase("tr").includes(q));
+      const inNote = !f && b.note.toLocaleLowerCase("tr").includes(q);
+      if(f || inNote) hits.push({b, f, inNote});
+    }
+    if(!hits.length) return h + `<div class="state"><h2>Sonuç yok</h2>Farklı bir kelimeyle arayın.</div>`;
+    return h + `<section class="section"><div class="list">${hits.map(({b, f}) => `<div class="item"><button class="main" type="button" data-act="br-pick" data-id="${esc(b.id)}"><span class="name">${esc(brName(b))}</span><span class="meta">${f && f.id !== "ad" ? esc(f.label + ": " + b.v[f.id]) : f ? "Şube adı" : "Notta geçiyor"}</span></button></div>`).join("")}</div></section>`;
   }
-  if(!any) h += `<div class="state"><h2>Sonuç yok</h2>Farklı bir kelimeyle arayın.</div>`;
+  const b = selBranch();
+  h += `<div class="brbar"><label class="brsel"><span>Şube</span><select id="brSel" aria-label="Şube seç">${list.map(x => `<option value="${esc(x.id)}" ${x.id === b.id ? "selected" : ""}>${esc(brName(x))}</option>`).join("")}</select></label>
+    <button class="btn" type="button" data-act="br-new">+ Şube</button></div>`;
+  const rows = S.sube.fields.filter(f => f.id !== "ad" && b.v[f.id]).map(f => {
+    const v = b.v[f.id];
+    return `<div class="brow"><div class="bv"><span>${esc(f.label)}</span><b>${esc(v)}</b></div>${actBtns(v, `${brName(b)} · ${f.label}: ${v}`, f.id === "tel" ? v : null)}</div>`;
+  }).join("");
+  const inv = invoiceText(b);
+  h += `<article class="icard brcard">
+    <header><h3>${esc(brName(b))}</h3><button class="ed" type="button" data-act="br-edit" data-id="${esc(b.id)}">Düzenle</button></header>
+    ${rows || `<div class="empty-line" style="padding:10px 0">Bu şubenin bilgisi girilmedi. Düzenle'ye dokunun.</div>`}
+    ${b.note ? `<div class="inote">${esc(b.note)}</div>` : ""}
+  </article>
+  <article class="icard invcard">
+    <header><h3>Fatura bilgileri</h3></header>
+    ${S.sube.company.name ? `<pre class="invtext">${esc(inv)}</pre>
+    <div class="btns two-btn"><button class="btn primary" type="button" data-act="copy" data-v="${esc(inv)}">${IC2.copy} Kopyala</button><button class="btn" type="button" data-act="share" data-v="${esc(inv)}">${IC2.share} Paylaş</button></div>`
+    : `<p class="empty-line" style="padding:4px 0 10px">Önce yukarıdaki şirket fatura bilgilerini girin.</p>`}
+  </article>`;
   return h;
 }
 async function copyValue(v){
-  try { await navigator.clipboard.writeText(v); toast(`Kopyalandı: ${v.length > 40 ? v.slice(0,40)+"…" : v}`); }
+  try { await navigator.clipboard.writeText(v); toast(`Kopyalandı: ${v.length > 40 ? v.slice(0,40).replace(/\n/g, " ")+"…" : v.replace(/\n/g, " ")}`); }
   catch(e){ toast("Kopyalanamadı. Uzun basıp seçerek kopyalayın."); }
 }
-function openInfoEditor(id){
-  const c = id ? S.infos.find(x => x.id === id) : null;
-  if(id && !c) return;
-  const rows = (c && c.fields && c.fields.length) ? c.fields.map(f => ({...f})) : [{l:"",v:""},{l:"",v:""}];
-  const rowHTML = (f, i) => `<div class="frow-ed" data-i="${i}"><input aria-label="Alan adı" placeholder="Örn. SGK sicil no" value="${esc(f.l)}"><input aria-label="Değer" placeholder="Değer" value="${esc(f.v)}"><button type="button" aria-label="Alanı sil">×</button></div>`;
-  const html = `
-    <h3>${c ? "Kartı düzenle" : "Yeni bilgi kartı"}</h3>
-    <p class="lead">Değere dokununca kopyalanır. Şifreleri buraya yazmayın; telefonun şifre yöneticisinde saklayın.</p>
-    <form id="if" novalidate>
-      <div class="two">
-        <div class="field"><label for="iTitle">Başlık</label><input id="iTitle" value="${esc(c?c.title:"")}" placeholder="Örn. Serik" ${c?"":"autofocus"}></div>
-        <div class="field"><label for="iGroup">Bölüm</label><select id="iGroup">${Object.entries(GROUPS).map(([k,l]) => `<option value="${k}" ${(c?c.group:"sube")===k?"selected":""}>${l}</option>`).join("")}</select></div>
-      </div>
-      <div class="field"><label>Alanlar</label><div id="rows">${rows.map(rowHTML).join("")}</div>
-        <button class="btn ghost" type="button" id="addRow" style="padding:10px">+ Alan ekle</button></div>
-      <div class="field"><label for="iNote">Not</label><textarea id="iNote">${esc(c?c.note||"":"")}</textarea></div>
-      <p class="err" id="iErr"></p>
-      <div class="btns">
-        <button class="btn primary" type="submit">${c ? "Kaydet" : "Kartı ekle"}</button>
-        ${c ? `<button class="btn danger" type="button" id="iDel">Bu kartı sil</button>` : ""}
-        <button class="btn ghost" type="button" id="iCancel">Vazgeç</button>
-      </div>
-    </form>`;
-  openSheet(html, sh => {
-    const box = sh.querySelector("#rows");
-    box.onclick = e => { const b = e.target.closest(".frow-ed button"); if(b) b.parentElement.remove(); };
-    sh.querySelector("#addRow").onclick = () => { box.insertAdjacentHTML("beforeend", rowHTML({l:"",v:""}, box.children.length)); box.lastElementChild.querySelector("input").focus(); };
-    sh.querySelector("#iCancel").onclick = closeSheet;
-    const del = sh.querySelector("#iDel");
+async function shareValue(v){
+  if(navigator.share){
+    try { await navigator.share({text: v}); return; }
+    catch(e){ if(e && e.name === "AbortError") return; }
+  }
+  copyValue(v);  // no share sheet here: at least put it on the clipboard
+}
+function openCompanyEditor(){
+  const c = S.sube.company;
+  openSheet(`
+    <h3>Şirket fatura bilgileri</h3>
+    <p class="lead">Bütün şubeler için aynıdır; şubenin fatura bilgisine yalnızca adresi eklenir.</p>
+    <div class="field"><label for="cName">Şirket unvanı</label><input id="cName" value="${esc(c.name)}" placeholder="Örn. ABC Gıda Ltd. Şti."></div>
+    <div class="two">
+      <div class="field"><label for="cOffice">Vergi dairesi</label><input id="cOffice" value="${esc(c.taxOffice)}"></div>
+      <div class="field"><label for="cNo">Vergi numarası</label><input id="cNo" inputmode="numeric" value="${esc(c.taxNo)}"></div>
+    </div>
+    <p class="err" id="cErr"></p>
+    <div class="btns"><button class="btn primary" type="button" id="cSave">Kaydet</button><button class="btn ghost" type="button" id="cCancel">Vazgeç</button></div>`, sh => {
+    sh.querySelector("#cCancel").onclick = closeSheet;
+    sh.querySelector("#cSave").onclick = () => {
+      const prev = S.sube;
+      S.sube = {...S.sube, company: {name: sh.querySelector("#cName").value.trim(), taxOffice: sh.querySelector("#cOffice").value.trim(), taxNo: sh.querySelector("#cNo").value.trim()}};
+      if(!persist()){ S.sube = prev; sh.querySelector("#cErr").textContent = dbErr(); return; }
+      closeSheet(); render(); toast("Şirket bilgileri kaydedildi");
+    };
+  });
+}
+function openBranchEditor(id){
+  const b = id ? S.sube.branches.find(x => x.id === id) : null;
+  if(id && !b) return;
+  const fRow = (f, v) => `<div class="field" data-fid="${esc(f.id)}"><label>${esc(f.label)}</label>${f.id === "adres"
+    ? `<textarea data-v rows="2">${esc(v)}</textarea>` : `<input data-v value="${esc(v)}" ${f.id === "tel" ? 'inputmode="tel"' : ""} ${f.id === "ad" && !b ? "autofocus" : ""}>`}</div>`;
+  const newRow = () => `<div class="frow-ed newf"><input aria-label="Alan adı" placeholder="Alan adı, örn. İnternet abone no"><input aria-label="Değer" placeholder="Değer"><button type="button" aria-label="Alanı kaldır">×</button></div>`;
+  openSheet(`
+    <h3>${b ? "Şubeyi düzenle" : "Yeni şube"}</h3>
+    <p class="lead">Boş bırakılan alanlar şube kartında görünmez. Eklediğiniz yeni alan bütün şubelerde yer alır.</p>
+    <div id="bFields">${S.sube.fields.map(f => fRow(f, b ? (b.v[f.id] || "") : "")).join("")}</div>
+    <div id="bNew"></div>
+    <div class="btns" style="margin:4px 0 14px;grid-template-columns:1fr 1fr;display:grid"><button class="btn ghost" type="button" id="bAdd" style="padding:10px">+ Alan ekle</button><button class="btn ghost" type="button" id="bFieldsEd" style="padding:10px">Alanları düzenle</button></div>
+    <div class="field"><label for="bNote">Not</label><textarea id="bNote">${esc(b ? b.note : "")}</textarea></div>
+    <p class="err" id="bErr"></p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="bSave">${b ? "Kaydet" : "Şubeyi ekle"}</button>
+      ${b ? `<button class="btn danger" type="button" id="bDel">Bu şubeyi sil</button>` : ""}
+      <button class="btn ghost" type="button" id="bCancel">Vazgeç</button>
+    </div>`, sh => {
+    const nb = sh.querySelector("#bNew");
+    sh.querySelector("#bAdd").onclick = () => { nb.insertAdjacentHTML("beforeend", newRow()); nb.lastElementChild.querySelector("input").focus(); };
+    nb.onclick = e => { const x = e.target.closest(".newf button"); if(x) x.parentElement.remove(); };
+    sh.querySelector("#bCancel").onclick = closeSheet;
+    sh.querySelector("#bFieldsEd").onclick = () => openFieldsEditor(id);
+    const del = sh.querySelector("#bDel");
     if(del) del.onclick = () => {
       if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
-      S.infos = S.infos.filter(x => x.id !== id); persist(); closeSheet(); render(); toast(`${c.title} silindi`);
+      const prev = S.sube;
+      S.sube = {...S.sube, branches: S.sube.branches.filter(x => x.id !== id)};
+      if(!persist()){ S.sube = prev; sh.querySelector("#bErr").textContent = dbErr(); return; }
+      closeSheet(); render();
+      toast(`${brName(b)} silindi`, "Geri al", () => { S.sube = {...S.sube, branches: [...S.sube.branches, b], sel: b.id}; persist(); render(); });
     };
-    sh.querySelector("#if").onsubmit = ev => {
-      ev.preventDefault();
-      const title = sh.querySelector("#iTitle").value.trim();
-      if(!title){ sh.querySelector("#iErr").textContent = "Karta bir başlık verin."; return; }
-      const fields = [...box.querySelectorAll(".frow-ed")].map(r => { const [a,b] = r.querySelectorAll("input"); return {l:a.value.trim(), v:b.value.trim()}; }).filter(f => f.l || f.v);
-      const card = {id: c ? c.id : newId(), title, group: sh.querySelector("#iGroup").value, fields, note: sh.querySelector("#iNote").value.trim(), order: c ? c.order : 999};
-      S.infos = [...S.infos.filter(x => x.id !== card.id), card];
-      if(!persist()) { sh.querySelector("#iErr").textContent = dbErr(); return; }
-      closeSheet(); render(); toast(c ? "Kaydedildi" : `${title} eklendi`);
+    sh.querySelector("#bSave").onclick = () => {
+      const err = sh.querySelector("#bErr");
+      const v = {};
+      sh.querySelectorAll("#bFields [data-fid]").forEach(r => { const x = r.querySelector("[data-v]").value.trim(); if(x) v[r.dataset.fid] = x; });
+      if(!v.ad){ err.textContent = "Şube adını yazın."; sh.querySelector('[data-fid="ad"] [data-v]').focus(); return; }
+      const fields = [...S.sube.fields];
+      for(const r of sh.querySelectorAll(".newf")){
+        const [l, x] = [...r.querySelectorAll("input")].map(i => i.value.trim());
+        if(!l && !x) continue;
+        if(!l){ err.textContent = "Yeni alana bir ad verin."; return; }
+        let f = fields.find(f => f.label.toLocaleLowerCase("tr") === l.toLocaleLowerCase("tr"));
+        if(!f){ f = {id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2,5), label: l}; fields.push(f); }
+        if(x) v[f.id] = x;
+      }
+      const br = {id: b ? b.id : newId(), v, note: sh.querySelector("#bNote").value.trim()};
+      const prev = S.sube;
+      S.sube = {...S.sube, fields, branches: [...S.sube.branches.filter(x => x.id !== br.id), br], sel: br.id};
+      if(!persist()){ S.sube = prev; err.textContent = dbErr(); return; }
+      S.iq = "";
+      closeSheet(); render(); toast(b ? "Kaydedildi" : `${v.ad} eklendi`);
+    };
+  });
+}
+// Rename, reorder or remove the fields every branch shares.
+function openFieldsEditor(backTo){
+  let rows = S.sube.fields.map(f => ({...f}));
+  const used = id => S.sube.branches.filter(b => b.v[id]).length;
+  const draw = sh => { sh.querySelector("#fList").innerHTML = rows.map((f, i) => `
+    <div class="fld-row" data-i="${i}">
+      <input value="${esc(f.label)}" aria-label="Alan adı" ${f.id === "ad" ? "" : ""}>
+      <button type="button" data-a="up" aria-label="Yukarı" ${i === 0 ? "disabled" : ""}>↑</button>
+      <button type="button" data-a="down" aria-label="Aşağı" ${i === rows.length - 1 ? "disabled" : ""}>↓</button>
+      ${f.id === "ad" ? `<span class="fld-lock" title="Şube adı silinemez">•</span>` : `<button type="button" data-a="del" class="x" aria-label="Alanı sil">×</button>`}
+      ${f._del ? `<div class="cat-move">${used(f.id)} şubede bu alana yazılmış bilgi silinecek. <button type="button" class="btn danger" data-a="confirm">Alanı sil</button></div>` : ""}
+    </div>`).join(""); };
+  openSheet(`
+    <h3>Alanları düzenle</h3>
+    <p class="lead">Bu alanlar bütün şubelerde aynı sırayla görünür. Adını değiştirebilir, sırasını değiştirebilir ya da silebilirsiniz.</p>
+    <div id="fList"></div>
+    <button class="btn ghost" type="button" id="fAdd" style="padding:10px;width:100%">+ Alan ekle</button>
+    <p class="err" id="fErr"></p>
+    <div class="btns"><button class="btn primary" type="button" id="fSave">Kaydet</button><button class="btn ghost" type="button" id="fCancel">Vazgeç</button></div>`, sh => {
+    draw(sh);
+    const list = sh.querySelector("#fList");
+    const sync = () => list.querySelectorAll(".fld-row").forEach(r => { rows[Number(r.dataset.i)].label = r.querySelector("input").value; });
+    list.onclick = e => {
+      const btn = e.target.closest("[data-a]"); if(!btn) return;
+      sync();
+      const i = Number(btn.closest(".fld-row").dataset.i), a = btn.dataset.a;
+      if(a === "up" && i > 0) [rows[i-1], rows[i]] = [rows[i], rows[i-1]];
+      else if(a === "down" && i < rows.length - 1) [rows[i+1], rows[i]] = [rows[i], rows[i+1]];
+      else if(a === "del"){ if(used(rows[i].id)) rows[i]._del = !rows[i]._del; else rows.splice(i, 1); }
+      else if(a === "confirm") rows.splice(i, 1);
+      draw(sh);
+    };
+    sh.querySelector("#fAdd").onclick = () => { sync(); rows.push({id: "f" + Date.now().toString(36) + Math.random().toString(36).slice(2,5), label: ""}); draw(sh); const ins = list.querySelectorAll("input"); ins[ins.length-1].focus(); };
+    const back = () => backTo === undefined ? closeSheet() : openBranchEditor(backTo);
+    sh.querySelector("#fCancel").onclick = back;
+    sh.querySelector("#fSave").onclick = () => {
+      sync();
+      if(rows.some(r => r._del)){ sh.querySelector("#fErr").textContent = "Silmek istediğiniz alan için \"Alanı sil\"e dokunun ya da × ile vazgeçin."; return; }
+      if(rows.some(r => !r.label.trim())){ sh.querySelector("#fErr").textContent = "Her alana bir ad verin."; return; }
+      const fields = rows.map(({_del, ...f}) => ({...f, label: f.label.trim()}));
+      const keep = new Set(fields.map(f => f.id));
+      const branches = S.sube.branches.map(b => ({...b, v: Object.fromEntries(Object.entries(b.v).filter(([k]) => keep.has(k)))}));
+      const prev = S.sube;
+      S.sube = {...S.sube, fields, branches};
+      if(!persist()){ S.sube = prev; sh.querySelector("#fErr").textContent = dbErr(); return; }
+      render(); toast("Alanlar kaydedildi"); back();
     };
   });
 }
@@ -991,10 +1179,15 @@ document.addEventListener("click", e => {
   else if(act === "filter-toggle"){ S.filterOpen = !S.filterOpen; render(); }
   else if(act === "filter-clear"){ S.catSel = []; S.filterOpen = false; saveCatSel(); render(); }
   else if(act === "copy") copyValue(el.dataset.v);
-  else if(act === "info-edit") openInfoEditor(el.dataset.id);
+  else if(act === "share") shareValue(el.dataset.v);
+  else if(act === "co-edit") openCompanyEditor();
+  else if(act === "br-new") openBranchEditor(null);
+  else if(act === "br-edit") openBranchEditor(el.dataset.id);
+  else if(act === "br-pick"){ S.sube = {...S.sube, sel: el.dataset.id}; S.iq = ""; persist(); render(); window.scrollTo(0,0); }
   else if(act === "jump-late"){ const s = document.querySelector(".sec-late"); if(s) s.scrollIntoView({behavior:"smooth", block:"start"}); }
 });
 document.addEventListener("change", e => {
+  if(e.target.id === "brSel"){ S.sube = {...S.sube, sel: e.target.value}; persist(); render(); return; }
   const cb = e.target.closest("[data-fcat]"); if(!cb) return;
   const id = cb.dataset.fcat;
   S.catSel = cb.checked ? [...new Set([...S.catSel, id])] : S.catSel.filter(x => x !== id);
@@ -1004,7 +1197,7 @@ document.addEventListener("input", e => {
   if(e.target.id === "q"){ S.q = e.target.value; render(); }
   if(e.target.id === "iq"){ S.iq = e.target.value; render(); }
 });
-$("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten geri yükleyin.") : S.tab === "bilgiler" ? openInfoEditor(null) : openEditor(null);
+$("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten geri yükleyin.") : S.tab === "bilgiler" ? openBranchEditor(null) : openEditor(null);
 $("#menuBtn").onclick = openMenu;
 
 function setTab(tab){
@@ -1427,7 +1620,7 @@ function openCats(){
 }
 
 function backupData(){
-  return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos};
+  return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube};
 }
 function markBackedUp(){ if(S.failed) return; S.lastBackup = new Date().toISOString(); persist(); render(); }
 // While saved data cannot be read, "backup" hands out that unreadable text untouched, so it can still be rescued.
@@ -1501,27 +1694,28 @@ function openMenu(){
       msg.style.color = "";
       let data;
       try { data = JSON.parse(sh.querySelector("#impTxt").value.replace(/^\uFEFF/, "")); } catch(e){ msg.textContent = "Bu metin geçerli bir yedek değil. Dosyayı seçin ya da metnin tamamını yapıştırın."; return; }
-      if(data && !Array.isArray(data.items) && Array.isArray(data.infos)){
+      if(data && !Array.isArray(data.items) && (isObj(data.sube) || Array.isArray(data.infos))){
         if(S.failed){ msg.textContent = "Kayıtlı veriler okunamadığı için önce tam yedeği (ödemeler dahil) yükleyin."; return; }
-        const infos = cleanInfos(data.infos);
-        if(S.infos.length && imp.dataset.confirm !== "1"){
+        if(!isObj(data.sube)){ msg.textContent = "Bu dosya eski biçimdeki bilgi kartlarını içeriyor; yeni Bilgiler sekmesi bunları kullanmıyor."; return; }
+        const sube = cleanSube(data.sube);
+        if(S.sube.branches.length && imp.dataset.confirm !== "1"){
           imp.dataset.confirm = "1";
-          imp.textContent = `Mevcut ${S.infos.length} bilgi kartının yerine ${infos.length} kart yüklensin mi? Ödemeleriniz değişmez. Onaylamak için tekrar dokunun`;
+          imp.textContent = `Mevcut ${S.sube.branches.length} şubenin yerine ${sube.branches.length} şube yüklensin mi? Ödemeleriniz değişmez. Onaylamak için tekrar dokunun`;
           return;
         }
-        const prevI = S.infos; S.infos = infos;
-        if(!persist()){ S.infos = prevI; msg.textContent = dbErr(); return; }
-        closeSheet(); setTab("bilgiler"); toast(`${infos.length} bilgi kartı yüklendi`);
+        const prevS = S.sube; S.sube = sube;
+        if(!persist()){ S.sube = prevS; msg.textContent = dbErr(); return; }
+        closeSheet(); setTab("bilgiler"); toast(`${sube.branches.length} şube yüklendi`);
         return;
       }
       if(!data || !Array.isArray(data.items)){ msg.textContent = "Yedekte ödeme kalemi bulunamadı."; return; }
       const items = data.items.filter(i => i && i.id && i.name);
-      const replacesInfos = Array.isArray(data.infos) && S.infos.length;
-      if((S.items.length || replacesInfos) && imp.dataset.confirm !== "1"){
+      const replacesSube = isObj(data.sube) && S.sube.branches.length;
+      if((S.items.length || replacesSube) && imp.dataset.confirm !== "1"){
         imp.dataset.confirm = "1";
         const parts = [];
         if(S.items.length) parts.push(`mevcut ${S.items.length} kalemin yerine ${items.length} kalem`);
-        if(replacesInfos) parts.push(`${S.infos.length} bilgi kartının yerine ${cleanInfos(data.infos).length} kart`);
+        if(replacesSube) parts.push(`${S.sube.branches.length} şubenin yerine ${cleanSube(data.sube).branches.length} şube`);
         imp.textContent = `${parts.join(" ve ")} yüklensin mi? Onaylamak için tekrar dokunun`.replace(/^./, c => c.toLocaleUpperCase("tr"));
         return;
       }
@@ -1529,10 +1723,11 @@ function openMenu(){
       try { mig = migrate({...data, items}); } catch(e){ msg.textContent = "Bu yedek okunamadı."; return; }
       const months = mig.months;
       const prev = {items:S.items, months:S.months, cats:S.cats};
-      const prevInfos = S.infos, prevFailed = S.failed;
+      const prevInfos = S.infos, prevSube = S.sube, prevFailed = S.failed;
       S.items = mig.items; S.months = months; S.cats = mig.cats; S.failed = null;
       if(Array.isArray(data.infos)) S.infos = cleanInfos(data.infos);
-      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; S.failed = prevFailed; msg.textContent = dbErr(); return; }
+      if(isObj(data.sube)) S.sube = cleanSube(data.sube);  // a backup from before branches existed leaves them as they are
+      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; S.sube = prevSube; S.failed = prevFailed; msg.textContent = dbErr(); return; }
       S.badRaw = null;
       closeSheet(); render(); toast(`${mig.items.length} kalem yedekten yüklendi`);
     };
@@ -1545,6 +1740,7 @@ function boot(){
   const h = location.hash.slice(1);
   if(["ajanda","ay","kalemler","bilgiler"].includes(h)) S.tab = h;
   load();
+  if(!S.sube) S.sube = emptySube();
   render();
   try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
   if("serviceWorker" in navigator && location.protocol === "https:"){
@@ -1573,7 +1769,7 @@ function tick(){
 tick.d = iso(todayDate());
 setInterval(tick, 60000);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) tick(); });
-window.addEventListener("storage", e => { if(e.key === KEY){ load(); render(); } });
+window.addEventListener("storage", e => { if(e.key === KEY){ load(); if(!S.sube) S.sube = emptySube(); render(); } });
 boot();
 })();
 </script>
