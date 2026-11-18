@@ -324,7 +324,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 12;
+const APP_VERSION = 13;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -918,13 +918,23 @@ function selBranch(){
   const list = S.sube.branches;
   return list.find(b => b.id === S.sube.sel) || sortedBranches()[0] || null;
 }
+// Invoice block, top to bottom: company name, branch address, tax office and tax number.
 function invoiceText(b){
   const c = S.sube.company, lines = [];
   if(c.name) lines.push(c.name);
+  if(b && b.v.adres) lines.push(`Adres: ${b.v.adres}`);
   const tax = [c.taxOffice && `Vergi Dairesi: ${c.taxOffice}`, c.taxNo && `VKN: ${c.taxNo}`].filter(Boolean).join(" · ");
   if(tax) lines.push(tax);
-  if(b && b.v.adres) lines.push(`Adres: ${b.v.adres}`);
   return lines.join("\n");
+}
+// Turkish phone numbers read as 0242 572 27 17 however they were typed (+90, spaces, dashes, no leading 0).
+// Anything that isn't a 10-digit Turkish number is left as typed.
+function fmtPhone(v){
+  let d = String(v ?? "").replace(/\D/g, "");
+  if(d.length === 12 && d.startsWith("90")) d = d.slice(2);
+  if(d.length === 10 && !d.startsWith("0")) d = "0" + d;
+  if(d.length !== 11 || !d.startsWith("0")) return String(v ?? "").trim();
+  return `${d.slice(0,4)} ${d.slice(4,7)} ${d.slice(7,9)} ${d.slice(9)}`;
 }
 const IC2 = {
   copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
@@ -959,7 +969,7 @@ function viewBilgiler(){
   h += `<div class="brbar"><label class="brsel"><span>Şube</span><select id="brSel" aria-label="Şube seç">${list.map(x => `<option value="${esc(x.id)}" ${x.id === b.id ? "selected" : ""}>${esc(brName(x))}</option>`).join("")}</select></label>
     <button class="btn" type="button" data-act="br-new">+ Şube</button></div>`;
   const rows = S.sube.fields.filter(f => f.id !== "ad" && b.v[f.id]).map(f => {
-    const v = b.v[f.id];
+    const v = f.id === "tel" ? fmtPhone(b.v[f.id]) : b.v[f.id];
     return `<div class="brow"><div class="bv"><span>${esc(f.label)}</span><b>${esc(v)}</b></div>${actBtns(v, `${brName(b)} · ${f.label}: ${v}`, f.id === "tel" ? v : null)}</div>`;
   }).join("");
   const inv = invoiceText(b);
@@ -1044,7 +1054,7 @@ function openBranchEditor(id){
     sh.querySelector("#bSave").onclick = () => {
       const err = sh.querySelector("#bErr");
       const v = {};
-      sh.querySelectorAll("#bFields [data-fid]").forEach(r => { const x = r.querySelector("[data-v]").value.trim(); if(x) v[r.dataset.fid] = x; });
+      sh.querySelectorAll("#bFields [data-fid]").forEach(r => { let x = r.querySelector("[data-v]").value.trim(); if(r.dataset.fid === "tel") x = fmtPhone(x); if(x) v[r.dataset.fid] = x; });
       if(!v.ad){ err.textContent = "Şube adını yazın."; sh.querySelector('[data-fid="ad"] [data-v]').focus(); return; }
       const fields = [...S.sube.fields];
       for(const r of sh.querySelectorAll(".newf")){
