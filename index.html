@@ -30,7 +30,7 @@
   color-scheme:light;
 }
 *{box-sizing:border-box}
-html,body{height:100%;margin:0}
+html,body{height:100%;margin:0;overflow-x:hidden;overflow-x:clip}  /* the swipe animation must never widen the page: Chrome would rescale it and the tab bar would jump */
 body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -292,7 +292,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -331,8 +331,9 @@ function addMonths(period, k){ let [y,m] = period.split("-").map(Number); m += k
 const curPeriod = () => { const t = todayDate(); return ym(t.getFullYear(), t.getMonth()+1); };
 const daysBetween = (a,b) => Math.round((parseISO(b) - parseISO(a)) / DAY);
 
-const fmtFull = new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtInt = new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",maximumFractionDigits:0});
+// amounts are shown as plain numbers (42.000 / 1.250,50), without the ₺ sign
+const fmtFull = new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtInt = new Intl.NumberFormat("tr-TR",{maximumFractionDigits:0});
 function tl(n, exact){ if(n==null || isNaN(n)) return "—"; return (exact && n%1) ? fmtFull.format(n) : fmtInt.format(Math.round(n)); }
 const fmtDay = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"short",weekday:"short"});
 const fmtLong = new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"long",year:"numeric"});
