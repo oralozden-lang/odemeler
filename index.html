@@ -169,6 +169,19 @@ nav.tabs button:focus-visible{outline-color:var(--hero-fill)}
 .paybox .pbh + .brow{border-top:0}
 .field label .opt{font-weight:600;color:var(--muted);font-size:11.5px;margin-left:4px}
 .shifted{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:1px}
+.bseg{margin:0 0 12px}
+.pinbox{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:18px 16px;display:grid;gap:10px;text-align:center}
+.pinbox h2{font-family:var(--font-display);font-size:19px;margin:0}
+.pinbox p{margin:0;font-size:13.5px;color:var(--muted)}
+.pinbox .btn.wide{margin-top:0}
+input.pin{width:100%;border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:12px;font-size:22px;letter-spacing:.4em;text-align:center;outline:0;font-variant-numeric:tabular-nums}
+input.pin:focus{border-color:var(--accent);background:var(--surface)}
+.vaultbar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--ok-soft);color:var(--ok);border-radius:12px;padding:8px 12px;font-size:13px;font-weight:700;margin-bottom:10px}
+.vaultbar button{border:1px solid currentColor;background:transparent;color:inherit;border-radius:9px;padding:5px 12px;font-weight:800}
+.copyall{display:flex;align-items:center;justify-content:center;gap:6px;margin:6px 0 8px}
+.copyall svg{width:18px;height:18px}
+.pinlink{text-align:center;margin:14px 0}
+.pinlink button{border:0;background:none;color:var(--muted);font-weight:700;text-decoration:underline;font-size:13px}
 .cobox{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 14px;margin-bottom:12px}
 .cobox span{display:grid;gap:1px;min-width:0}
 .cobox b{font-size:14.5px;overflow-wrap:anywhere}
@@ -329,7 +342,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -348,7 +361,7 @@ const ICON = {
 
 /* ---------- state ---------- */
 const S = {
-  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], sube:null, iq:"", lastBackup:null, failed:null, badRaw:null,
+  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], sube:null, vault:null, bseg:"sube", iq:"", lastBackup:null, failed:null, badRaw:null,
   tab:"ajanda", cursor:null, monthFilter:"all", q:"", catSel:loadCatSel(), filterOpen:false
 };
 
@@ -683,6 +696,7 @@ function load(){
     S.items = r.items; S.months = r.months; S.cats = r.cats;
     S.infos = cleanInfos(d.infos);  // the old free-form cards: no longer shown, kept so nothing is thrown away
     S.sube = cleanSube(d.sube);
+    S.vault = cleanVault(d.vault);
     S.lastBackup = typeof d.lastBackup === "string" ? d.lastBackup : null;
     if((d.schema || 1) < SCHEMA){
       // keep the pre-upgrade copy once, in case the upgrade gets something wrong
@@ -702,7 +716,7 @@ function persist(){
     return false;
   }
   try {
-    localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, lastBackup:S.lastBackup}));
+    localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, vault:S.vault, lastBackup:S.lastBackup}));
     return true;
   } catch(e){
     toast("Kaydedilemedi: telefonda yer kalmamış olabilir. Hemen yedek alın.");
@@ -918,7 +932,7 @@ const DEFAULT_FIELDS = [
   {id:"ticsicil", label:"Ticaret sicil no"}, {id:"elektrik", label:"Elektrik abone no"}, {id:"su", label:"Su abone no"},
   {id:"dogalgaz", label:"Doğalgaz abone no"}, {id:"sgk", label:"SGK sicil no"}
 ];
-const emptySube = () => ({company:{name:"", taxOffice:"", taxNo:""}, fields: DEFAULT_FIELDS.map(f => ({...f})), branches: [], sel: null});
+const emptySube = () => ({company:{name:"", taxOffice:"", taxNo:""}, fields: DEFAULT_FIELDS.map(f => ({...f})), branches: [], sel: null, general: []});
 function cleanSube(d){
   const out = emptySube();
   if(!isObj(d)) return out;
@@ -935,6 +949,10 @@ function cleanSube(d){
     return {id: String(b.id ?? "") || newId(), v, note: String(b.note ?? "")};
   }).filter(b => b.v.ad);
   out.sel = typeof d.sel === "string" ? d.sel : null;
+  out.general = Array.isArray(d.general) ? d.general.filter(c => isObj(c) && c.title).map(c => ({
+    id: String(c.id ?? "") || newId(), title: String(c.title), note: String(c.note ?? ""),
+    fields: Array.isArray(c.fields) ? c.fields.filter(isObj).map(f => ({l: String(f.l ?? ""), v: String(f.v ?? "")})) : []
+  })) : [];
   return out;
 }
 const brName = b => b.v.ad || "Adsız şube";
@@ -970,7 +988,7 @@ const telHref = v => "tel:" + String(v).replace(/[^\d+]/g, "");
 function actBtns(copyText, shareText, tel){
   return `<span class="ract">${tel ? `<a class="rbtn" href="${esc(telHref(tel))}" aria-label="Ara">${IC2.call}</a>` : ""}<button class="rbtn" type="button" data-act="copy" data-v="${esc(copyText)}" aria-label="Kopyala">${IC2.copy}</button><button class="rbtn" type="button" data-act="share" data-v="${esc(shareText)}" aria-label="Paylaş">${IC2.share}</button></span>`;
 }
-function viewBilgiler(){
+function viewSubeler(){
   const c = S.sube.company, list = sortedBranches();
   const q = S.iq.trim().toLocaleLowerCase("tr");
   let h = `<button class="cobox" type="button" data-act="co-edit">${c.name
@@ -1149,6 +1167,275 @@ function openFieldsEditor(backTo){
   });
 }
 
+/* ---------- bilgiler: Şubeler | Genel | Kartlar ---------- */
+function viewBilgiler(){
+  const seg = S.bseg || "sube";
+  const segs = [["sube","Şubeler"],["genel","Genel"],["kart","Kartlar"]];
+  const bar = `<div class="seg bseg" role="group" aria-label="Bilgiler">${segs.map(([k, l]) => `<button type="button" data-act="bseg" data-seg="${k}" aria-pressed="${seg === k}">${l}</button>`).join("")}</div>`;
+  return bar + (seg === "genel" ? viewGenel() : seg === "kart" ? viewKartlar() : viewSubeler());
+}
+function setBseg(seg){
+  if(S.bseg === "kart" && seg !== "kart") lockVault();
+  S.bseg = seg; S.iq = ""; render(); window.scrollTo(0, 0);
+}
+
+/* ---- Genel: free-form cards for company-wide information (no PIN) ---- */
+function viewGenel(){
+  const list = (S.sube.general || []).slice().sort((a, b) => a.title.localeCompare(b.title, "tr"));
+  if(!list.length) return `<div class="state"><h2>Henüz genel bilgi yok</h2>Şirket banka hesapları, muhasebe, merkez bilgileri gibi şubeye ait olmayan bilgiler için kart ekleyin.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="gen-new">Kart ekle</button></div></div>`;
+  const q = S.iq.trim().toLocaleLowerCase("tr");
+  const match = c => !q || [c.title, c.note, ...c.fields.flatMap(f => [f.l, f.v])].join(" ").toLocaleLowerCase("tr").includes(q);
+  let h = `<label class="search" for="iq">${ICON.search}<input id="iq" type="search" placeholder="Genel bilgilerde ara" value="${esc(S.iq)}" autocomplete="off"></label>`;
+  const shown = list.filter(match);
+  if(!shown.length) return h + `<div class="state"><h2>Sonuç yok</h2>Farklı bir kelimeyle arayın.</div>`;
+  h += `<div class="icards" style="margin-top:12px">` + shown.map(c => `
+    <article class="icard">
+      <header><h3>${esc(c.title)}</h3><button class="ed" type="button" data-act="gen-edit" data-id="${esc(c.id)}">Düzenle</button></header>
+      ${c.fields.filter(f => f.v).map(f => `<div class="brow"><div class="bv"><span>${esc(f.l)}</span><b>${esc(f.v)}</b></div>${actBtns(f.v, `${c.title} · ${f.l}: ${f.v}`, null)}</div>`).join("")}
+      ${c.note ? `<div class="inote">${esc(c.note)}</div>` : ""}
+    </article>`).join("") + `</div>`;
+  return h;
+}
+function openGeneralEditor(id){
+  const c = id ? (S.sube.general || []).find(x => x.id === id) : null;
+  if(id && !c) return;
+  const rows = c && c.fields.length ? c.fields : [{l:"", v:""}, {l:"", v:""}];
+  const rowHTML = f => `<div class="frow-ed"><input aria-label="Alan adı" placeholder="Örn. IBAN" value="${esc(f.l)}"><input aria-label="Değer" placeholder="Değer" value="${esc(f.v)}"><button type="button" aria-label="Alanı sil">×</button></div>`;
+  openSheet(`
+    <h3>${c ? "Kartı düzenle" : "Yeni genel bilgi"}</h3>
+    <p class="lead">Şubeye ait olmayan bilgiler için. Şifre yazmayın; bu bölüm kilitli değildir.</p>
+    <div class="field"><label for="gTitle">Başlık</label><input id="gTitle" value="${esc(c ? c.title : "")}" placeholder="Örn. Şirket banka hesapları" ${c ? "" : "autofocus"}></div>
+    <div class="field"><label>Alanlar</label><div id="gRows">${rows.map(rowHTML).join("")}</div>
+      <button class="btn ghost" type="button" id="gAdd" style="padding:10px">+ Alan ekle</button></div>
+    <div class="field"><label for="gNote">Not</label><textarea id="gNote">${esc(c ? c.note : "")}</textarea></div>
+    <p class="err" id="gErr"></p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="gSave">${c ? "Kaydet" : "Kartı ekle"}</button>
+      ${c ? `<button class="btn danger" type="button" id="gDel">Bu kartı sil</button>` : ""}
+      <button class="btn ghost" type="button" id="gCancel">Vazgeç</button>
+    </div>`, sh => {
+    const box = sh.querySelector("#gRows");
+    box.onclick = e => { const b = e.target.closest(".frow-ed button"); if(b) b.parentElement.remove(); };
+    sh.querySelector("#gAdd").onclick = () => { box.insertAdjacentHTML("beforeend", rowHTML({l:"", v:""})); box.lastElementChild.querySelector("input").focus(); };
+    sh.querySelector("#gCancel").onclick = closeSheet;
+    const save = general => { const prev = S.sube; S.sube = {...S.sube, general}; if(!persist()){ S.sube = prev; sh.querySelector("#gErr").textContent = dbErr(); return false; } return true; };
+    const del = sh.querySelector("#gDel");
+    if(del) del.onclick = () => {
+      if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
+      if(!save(S.sube.general.filter(x => x.id !== id))) return;
+      closeSheet(); render();
+      toast(`${c.title} silindi`, "Geri al", () => { S.sube = {...S.sube, general: [...S.sube.general, c]}; persist(); render(); });
+    };
+    sh.querySelector("#gSave").onclick = () => {
+      const title = sh.querySelector("#gTitle").value.trim();
+      if(!title){ sh.querySelector("#gErr").textContent = "Karta bir başlık verin."; return; }
+      const fields = [...box.querySelectorAll(".frow-ed")].map(r => { const [a, b] = r.querySelectorAll("input"); return {l: a.value.trim(), v: b.value.trim()}; }).filter(f => f.l || f.v);
+      const card = {id: c ? c.id : newId(), title, fields, note: sh.querySelector("#gNote").value.trim()};
+      if(!save([...(S.sube.general || []).filter(x => x.id !== card.id), card])) return;
+      closeSheet(); render(); toast(c ? "Kaydedildi" : `${title} eklendi`);
+    };
+  });
+}
+
+/* ---- Kartlar: encrypted with a 6-digit PIN ----
+   The cards are stored only as AES-GCM ciphertext (S.vault), under a key derived from the PIN with PBKDF2.
+   Unlocking keeps the key and the cards in memory (V) until it locks again: leaving the section,
+   the app going to the background, or 3 minutes without a touch. A forgotten PIN cannot be recovered. */
+const VAULT_ITER = 600000, LOCK_MS = 3 * 60 * 1000, PIN_FAIL_KEY = "odemeler.pin";
+const V = {key: null, salt: null, cards: null, timer: null};
+const b64 = buf => { let s = ""; for(const x of new Uint8Array(buf)) s += String.fromCharCode(x); return btoa(s); };
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+function cleanVault(v){
+  if(!isObj(v) || typeof v.salt !== "string" || typeof v.iv !== "string" || typeof v.ct !== "string") return null;
+  const iter = Number(v.iter);
+  return {v: 1, iter: Number.isInteger(iter) && iter >= 100000 ? iter : VAULT_ITER, salt: v.salt, iv: v.iv, ct: v.ct};
+}
+async function deriveKey(pin, salt, iter){
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name: "PBKDF2", salt, iterations: iter, hash: "SHA-256"}, base, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]);
+}
+async function sealVault(){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name: "AES-GCM", iv}, V.key, new TextEncoder().encode(JSON.stringify(V.cards)));
+  return {v: 1, iter: VAULT_ITER, salt: b64(V.salt), iv: b64(iv), ct: b64(ct)};
+}
+async function saveVault(){
+  const prev = S.vault;
+  S.vault = await sealVault();
+  if(!persist()){ S.vault = prev; return false; }
+  return true;
+}
+function lockVault(){
+  if(!V.key && !V.cards) return;
+  V.key = V.salt = V.cards = null; clearTimeout(V.timer);
+  if($(".overlay [data-vault]")) closeSheet();
+  if(S.tab === "bilgiler" && S.bseg === "kart") render();
+}
+function touchVault(){ if(V.key){ clearTimeout(V.timer); V.timer = setTimeout(() => { lockVault(); toast("Kartlar kilitlendi"); }, LOCK_MS); } }
+["pointerdown", "keydown", "input"].forEach(t => document.addEventListener(t, touchVault, {passive: true}));
+document.addEventListener("visibilitychange", () => { if(document.hidden) lockVault(); });
+function pinWait(){ try { const w = JSON.parse(localStorage.getItem(PIN_FAIL_KEY) || "{}"); return w.until && w.until > Date.now() ? Math.ceil((w.until - Date.now()) / 1000) : 0; } catch(e){ return 0; } }
+function pinFailed(){
+  try {
+    const w = JSON.parse(localStorage.getItem(PIN_FAIL_KEY) || "{}"), n = (w.n || 0) + 1;
+    localStorage.setItem(PIN_FAIL_KEY, JSON.stringify(n >= 5 ? {n: 0, until: Date.now() + 30000} : {n}));
+  } catch(e){}
+}
+const pinOk = p => /^\d{6}$/.test(p);
+const fmtCardNo = v => String(v || "").replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ");
+function luhn(num){ let s = 0, alt = false; for(let i = num.length - 1; i >= 0; i--){ let d = +num[i]; if(alt){ d *= 2; if(d > 9) d -= 9; } s += d; alt = !alt; } return s % 10 === 0; }
+const pinInput = (id, ph) => `<input id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="${ph}" class="pin">`;
+function viewKartlar(){
+  if(S.failed) return `<div class="state">Önce kayıtlı verileri yedekten geri yükleyin.</div>`;
+  if(!S.vault) return `<div class="pinbox">
+      <h2>Kartlar için PIN belirleyin</h2>
+      <p>Kart bilgileri bu 6 haneli PIN ile şifrelenir; telefonda ve yedek dosyasında okunamaz durur. <b>PIN unutulursa kartlar kurtarılamaz.</b></p>
+      ${pinInput("pinNew", "6 haneli PIN")}${pinInput("pinNew2", "PIN'i tekrar yazın")}
+      <p class="err" id="pinErr"></p>
+      <button class="btn primary wide" type="button" data-act="vault-create">PIN'i belirle</button>
+    </div>`;
+  if(!V.key) {
+    const wait = pinWait();
+    return `<div class="pinbox">
+      <h2>Kartlar kilitli</h2>
+      <p>Açmak için 6 haneli PIN'i girin. 3 dakika dokunulmazsa ya da uygulamadan çıkınca yeniden kilitlenir.</p>
+      ${pinInput("pinIn", "PIN")}
+      <p class="err" id="pinErr">${wait ? `Çok fazla yanlış deneme. ${wait} saniye bekleyin.` : ""}</p>
+      <button class="btn primary wide" type="button" data-act="vault-open">Kilidi aç</button>
+      <button class="btn ghost wide" type="button" data-act="vault-forgot">PIN'i unuttum</button>
+    </div>`;
+  }
+  const q = S.iq.trim().toLocaleLowerCase("tr");
+  const list = V.cards.slice().sort((a, b) => a.label.localeCompare(b.label, "tr"))
+    .filter(c => !q || [c.label, c.holder, c.note, c.number.slice(-4)].join(" ").toLocaleLowerCase("tr").includes(q));
+  let h = `<div class="vaultbar"><span>🔓 Açık · 3 dk dokunulmazsa kilitlenir</span><button type="button" data-act="vault-lock">Kilitle</button></div>`;
+  if(!V.cards.length) return h + `<div class="state"><h2>Henüz kart yok</h2>Kartlarınızı + ile ekleyin.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="card-new">Kart ekle</button></div></div>
+    <p class="pinlink"><button type="button" data-act="pin-change">PIN'i değiştir</button></p>`;
+  h += `<label class="search" for="iq">${ICON.search}<input id="iq" type="search" placeholder="Kart adı, sahibi, son 4 hane" value="${esc(S.iq)}" autocomplete="off"></label>`;
+  if(!list.length) h += `<div class="state"><h2>Sonuç yok</h2>Farklı bir kelimeyle arayın.</div>`;
+  const row = (label, shown, copy, what) => `<div class="brow"><div class="bv"><span>${label}</span><b>${esc(shown)}</b></div><span class="ract"><button class="rbtn" type="button" data-act="card-copy" data-v="${esc(copy)}" data-what="${esc(what)}" aria-label="${esc(what)} kopyala">${IC2.copy}</button></span></div>`;
+  h += `<div class="icards" style="margin-top:12px">` + list.map(c => `
+    <article class="icard">
+      <header><h3>${esc(c.label)}</h3><button class="ed" type="button" data-act="card-edit" data-id="${esc(c.id)}">Düzenle</button></header>
+      ${c.holder ? row("Kart sahibi", c.holder, c.holder, "Kart sahibi") : ""}
+      ${row("Kart numarası", fmtCardNo(c.number), c.number, "Kart numarası")}
+      ${c.exp ? row("Son kullanma", c.exp, c.exp, "Son kullanma tarihi") : ""}
+      ${c.cvv ? row("CVV", c.cvv, c.cvv, "CVV") : ""}
+      ${c.note ? `<div class="inote">${esc(c.note)}</div>` : ""}
+      <button class="btn wide copyall" type="button" data-act="card-copyall" data-id="${esc(c.id)}">${IC2.copy} Tümünü kopyala</button>
+    </article>`).join("") + `</div>
+    <p class="pinlink"><button type="button" data-act="pin-change">PIN'i değiştir</button></p>`;
+  return h;
+}
+async function copyQuiet(v, what){
+  try { await navigator.clipboard.writeText(v); toast(`${what} kopyalandı`); }
+  catch(e){ toast("Kopyalanamadı. Uzun basıp seçerek kopyalayın."); }
+}
+async function vaultCreate(){
+  const a = $("#pinNew").value, b = $("#pinNew2").value, err = $("#pinErr");
+  if(!pinOk(a)){ err.textContent = "PIN 6 rakamdan oluşmalı."; return; }
+  if(a !== b){ err.textContent = "İki PIN aynı değil."; return; }
+  V.salt = crypto.getRandomValues(new Uint8Array(16));
+  V.key = await deriveKey(a, V.salt, VAULT_ITER); V.cards = [];
+  if(!(await saveVault())){ V.key = V.salt = V.cards = null; err.textContent = dbErr(); return; }
+  touchVault(); render(); toast("PIN belirlendi. Kartlarınızı ekleyebilirsiniz.");
+}
+async function vaultOpen(){
+  const err = $("#pinErr"), pin = $("#pinIn").value;
+  const wait = pinWait(); if(wait){ err.textContent = `Çok fazla yanlış deneme. ${wait} saniye bekleyin.`; return; }
+  if(!pinOk(pin)){ err.textContent = "6 haneli PIN'i girin."; return; }
+  err.textContent = "Açılıyor…";
+  try {
+    const v = S.vault, salt = unb64(v.salt);
+    const key = await deriveKey(pin, salt, v.iter);
+    const pt = await crypto.subtle.decrypt({name: "AES-GCM", iv: unb64(v.iv)}, key, unb64(v.ct));
+    const cards = JSON.parse(new TextDecoder().decode(pt));
+    V.key = key; V.salt = salt; V.cards = Array.isArray(cards) ? cards : [];
+    try { localStorage.removeItem(PIN_FAIL_KEY); } catch(e){}
+    touchVault(); render();
+  } catch(e){
+    pinFailed();
+    const w = pinWait();
+    err.textContent = w ? `Çok fazla yanlış deneme. ${w} saniye bekleyin.` : "PIN yanlış.";
+    const inp = $("#pinIn"); if(inp){ inp.value = ""; inp.focus(); }
+  }
+}
+function vaultForgot(el){
+  if(el.dataset.confirm !== "1"){ el.dataset.confirm = "1"; el.textContent = "Bütün kartlar silinecek. Onaylamak için tekrar dokunun"; return; }
+  S.vault = null; V.key = V.salt = V.cards = null;
+  persist(); render(); toast("Kartlar silindi. Yeni PIN belirleyebilirsiniz.");
+}
+function openPinChange(){
+  openSheet(`<div data-vault>
+    <h3>PIN'i değiştir</h3>
+    <div class="field"><label for="pcOld">Şu anki PIN</label>${pinInput("pcOld", "")}</div>
+    <div class="field"><label for="pcNew">Yeni PIN</label>${pinInput("pcNew", "")}</div>
+    <div class="field"><label for="pcNew2">Yeni PIN tekrar</label>${pinInput("pcNew2", "")}</div>
+    <p class="err" id="pcErr"></p>
+    <div class="btns"><button class="btn primary" type="button" id="pcSave">PIN'i değiştir</button><button class="btn ghost" type="button" id="pcCancel">Vazgeç</button></div></div>`, sh => {
+    sh.querySelector("#pcCancel").onclick = closeSheet;
+    sh.querySelector("#pcSave").onclick = async () => {
+      const err = sh.querySelector("#pcErr"), o = sh.querySelector("#pcOld").value, a = sh.querySelector("#pcNew").value, b = sh.querySelector("#pcNew2").value;
+      if(!pinOk(a)){ err.textContent = "Yeni PIN 6 rakamdan oluşmalı."; return; }
+      if(a !== b){ err.textContent = "Yeni PIN'ler aynı değil."; return; }
+      try { await crypto.subtle.decrypt({name: "AES-GCM", iv: unb64(S.vault.iv)}, await deriveKey(o, unb64(S.vault.salt), S.vault.iter), unb64(S.vault.ct)); }
+      catch(e){ err.textContent = "Şu anki PIN yanlış."; return; }
+      const prev = {key: V.key, salt: V.salt};
+      V.salt = crypto.getRandomValues(new Uint8Array(16)); V.key = await deriveKey(a, V.salt, VAULT_ITER);
+      if(!(await saveVault())){ V.key = prev.key; V.salt = prev.salt; err.textContent = dbErr(); return; }
+      closeSheet(); toast("PIN değiştirildi");
+    };
+  });
+}
+function openCardEditor(id){
+  if(!V.key) return;
+  const c = id ? V.cards.find(x => x.id === id) : null;
+  if(id && !c) return;
+  openSheet(`<div data-vault>
+    <h3>${c ? "Kartı düzenle" : "Yeni kart"}</h3>
+    <div class="field"><label for="kLabel">Kart adı</label><input id="kLabel" value="${esc(c ? c.label : "")}" placeholder="Örn. Garanti sanal 1" autocomplete="off" ${c ? "" : "autofocus"}></div>
+    <div class="field"><label for="kHolder">Kart sahibi</label><input id="kHolder" value="${esc(c ? c.holder : "")}" autocomplete="off"></div>
+    <div class="field"><label for="kNo">Kart numarası</label><input id="kNo" inputmode="numeric" value="${esc(c ? fmtCardNo(c.number) : "")}" placeholder="0000 0000 0000 0000" autocomplete="off"></div>
+    <div class="two">
+      <div class="field"><label for="kExp">Son kullanma (AA/YY)</label><input id="kExp" inputmode="numeric" value="${esc(c ? c.exp : "")}" placeholder="12/27" autocomplete="off"></div>
+      <div class="field"><label for="kCvv">CVV</label><input id="kCvv" inputmode="numeric" maxlength="4" value="${esc(c ? c.cvv : "")}" autocomplete="off"></div>
+    </div>
+    <div class="field"><label for="kNote">Not</label><textarea id="kNote">${esc(c ? c.note : "")}</textarea></div>
+    <p class="err" id="kErr"></p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="kSave">${c ? "Kaydet" : "Kartı ekle"}</button>
+      ${c ? `<button class="btn danger" type="button" id="kDel">Bu kartı sil</button>` : ""}
+      <button class="btn ghost" type="button" id="kCancel">Vazgeç</button>
+    </div></div>`, sh => {
+    const no = sh.querySelector("#kNo"), exp = sh.querySelector("#kExp"), cvv = sh.querySelector("#kCvv"), err = sh.querySelector("#kErr");
+    no.oninput = () => { no.value = fmtCardNo(no.value.replace(/\D/g, "").slice(0, 19)); };
+    exp.oninput = () => { const d = exp.value.replace(/\D/g, "").slice(0, 4); exp.value = d.length > 2 ? d.slice(0, 2) + "/" + d.slice(2) : d; };
+    cvv.oninput = () => { cvv.value = cvv.value.replace(/\D/g, "").slice(0, 4); };
+    sh.querySelector("#kCancel").onclick = closeSheet;
+    const store = async cards => { const prev = V.cards; V.cards = cards; if(!(await saveVault())){ V.cards = prev; err.textContent = dbErr(); return false; } return true; };
+    const del = sh.querySelector("#kDel");
+    if(del) del.onclick = async () => {
+      if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
+      if(!(await store(V.cards.filter(x => x.id !== id)))) return;
+      closeSheet(); render(); toast(`${c.label} silindi`);
+    };
+    const save = sh.querySelector("#kSave");
+    save.onclick = async () => {
+      const label = sh.querySelector("#kLabel").value.trim(), number = no.value.replace(/\D/g, ""), e = exp.value.trim();
+      if(!label){ err.textContent = "Karta bir ad verin (ör. Garanti sanal 1)."; return; }
+      if(number.length < 12){ err.textContent = "Kart numarasını yazın."; return; }
+      if(e && !/^(0[1-9]|1[0-2])\/\d{2}$/.test(e)){ err.textContent = "Son kullanma tarihini AA/YY olarak yazın, örn. 12/27."; return; }
+      if(!luhn(number) && save.dataset.ok !== number){
+        save.dataset.ok = number;
+        err.textContent = "Kart numarası hatalı görünüyor. Kontrol edin; yine de kaydetmek için tekrar dokunun."; return;
+      }
+      const card = {id: c ? c.id : newId(), label, holder: sh.querySelector("#kHolder").value.trim(), number, exp: e, cvv: cvv.value, note: sh.querySelector("#kNote").value.trim()};
+      if(!(await store([...V.cards.filter(x => x.id !== card.id), card]))) return;
+      closeSheet(); render(); toast(c ? "Kaydedildi" : `${label} eklendi`);
+    };
+  });
+}
+
 function backupNag(){
   if(S.tab !== "ajanda") return "";
   const lb = S.lastBackup ? new Date(S.lastBackup) : null;
@@ -1215,6 +1502,21 @@ document.addEventListener("click", e => {
   else if(act === "filter-clear"){ S.catSel = []; S.filterOpen = false; saveCatSel(); render(); }
   else if(act === "copy") copyValue(el.dataset.v);
   else if(act === "share") shareValue(el.dataset.v);
+  else if(act === "bseg") setBseg(el.dataset.seg);
+  else if(act === "gen-new") openGeneralEditor(null);
+  else if(act === "gen-edit") openGeneralEditor(el.dataset.id);
+  else if(act === "card-new") openCardEditor(null);
+  else if(act === "card-edit") openCardEditor(el.dataset.id);
+  else if(act === "card-copy") copyQuiet(el.dataset.v, el.dataset.what);
+  else if(act === "card-copyall"){
+    const c = V.cards && V.cards.find(x => x.id === el.dataset.id);
+    if(c) copyQuiet([c.holder && `Kart sahibi: ${c.holder}`, `Kart no: ${c.number}`, c.exp && `Son kullanma: ${c.exp}`, c.cvv && `CVV: ${c.cvv}`].filter(Boolean).join("\n"), "Kart bilgileri");
+  }
+  else if(act === "vault-create") vaultCreate();
+  else if(act === "vault-open") vaultOpen();
+  else if(act === "vault-forgot") vaultForgot(el);
+  else if(act === "vault-lock") lockVault();
+  else if(act === "pin-change") openPinChange();
   else if(act === "co-edit") openCompanyEditor();
   else if(act === "br-new") openBranchEditor(null);
   else if(act === "br-edit") openBranchEditor(el.dataset.id);
@@ -1228,14 +1530,20 @@ document.addEventListener("change", e => {
   S.catSel = cb.checked ? [...new Set([...S.catSel, id])] : S.catSel.filter(x => x !== id);
   saveCatSel(); render();
 });
+document.addEventListener("keydown", e => {
+  if(e.key !== "Enter") return;
+  if(e.target.id === "pinIn") vaultOpen();
+  else if(e.target.id === "pinNew2") vaultCreate();
+});
 document.addEventListener("input", e => {
   if(e.target.id === "q"){ S.q = e.target.value; render(); }
   if(e.target.id === "iq"){ S.iq = e.target.value; render(); }
 });
-$("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten geri yükleyin.") : S.tab === "bilgiler" ? openBranchEditor(null) : openEditor(null);
+$("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten geri yükleyin.") : S.tab === "bilgiler" ? (S.bseg === "genel" ? openGeneralEditor(null) : S.bseg === "kart" ? (V.key ? openCardEditor(null) : toast("Önce kartların kilidini açın.")) : openBranchEditor(null)) : openEditor(null);
 $("#menuBtn").onclick = openMenu;
 
 function setTab(tab){
+  if(tab !== "bilgiler") lockVault();
   S.tab = tab; if(tab==="ay" && !S.cursor) S.cursor = curPeriod();
   if(location.hash !== "#"+tab) history.replaceState(null, "", "#"+tab);
   render(); window.scrollTo(0,0);
@@ -1677,7 +1985,7 @@ function openCats(){
 }
 
 function backupData(){
-  return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube};
+  return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, vault:S.vault};
 }
 function markBackedUp(){ if(S.failed) return; S.lastBackup = new Date().toISOString(); persist(); render(); }
 // While saved data cannot be read, "backup" hands out that unreadable text untouched, so it can still be rescued.
@@ -1755,6 +2063,7 @@ function openMenu(){
         if(S.failed){ msg.textContent = "Kayıtlı veriler okunamadığı için önce tam yedeği (ödemeler dahil) yükleyin."; return; }
         if(!isObj(data.sube)){ msg.textContent = "Bu dosya eski biçimdeki bilgi kartlarını içeriyor; yeni Bilgiler sekmesi bunları kullanmıyor."; return; }
         const sube = cleanSube(data.sube);
+        if(!Array.isArray(data.sube.general)) sube.general = S.sube.general;  // a branch-only file keeps the Genel cards
         if(S.sube.branches.length && imp.dataset.confirm !== "1"){
           imp.dataset.confirm = "1";
           imp.textContent = `Mevcut ${S.sube.branches.length} şubenin yerine ${sube.branches.length} şube yüklensin mi? Ödemeleriniz değişmez. Onaylamak için tekrar dokunun`;
@@ -1783,8 +2092,14 @@ function openMenu(){
       const prevInfos = S.infos, prevSube = S.sube, prevFailed = S.failed;
       S.items = mig.items; S.months = months; S.cats = mig.cats; S.failed = null;
       if(Array.isArray(data.infos)) S.infos = cleanInfos(data.infos);
-      if(isObj(data.sube)) S.sube = cleanSube(data.sube);  // a backup from before branches existed leaves them as they are
-      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; S.sube = prevSube; S.failed = prevFailed; msg.textContent = dbErr(); return; }
+      if(isObj(data.sube)){  // a backup from before branches existed leaves them as they are
+        const sube = cleanSube(data.sube);
+        if(!Array.isArray(data.sube.general)) sube.general = S.sube.general;
+        S.sube = sube;
+      }
+      const prevVault = S.vault;
+      if(isObj(data.vault)){ S.vault = cleanVault(data.vault); lockVault(); }  // cards open with the PIN they were saved under
+      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; S.sube = prevSube; S.vault = prevVault; S.failed = prevFailed; msg.textContent = dbErr(); return; }
       S.badRaw = null;
       closeSheet(); render(); toast(`${mig.items.length} kalem yedekten yüklendi`);
     };
