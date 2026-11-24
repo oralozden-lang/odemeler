@@ -270,6 +270,14 @@ input.pin:focus{border-color:var(--accent);background:var(--surface)}
 .alert.soft b{color:var(--accent)}
 .banner.nag{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#FFF6E5;border-color:#F3D9A4;color:#7A4B07}
 .banner.nag b{flex:none;color:var(--accent);font-size:13.5px}
+.agg-rel{flex:none;text-align:right;font-weight:800;font-size:14px;color:var(--accent);white-space:nowrap}
+.agg-rel.soon{color:var(--warn)}
+.agg-rel.today{color:var(--ok)}
+.agg-rel small{display:block;font-weight:600;font-size:12px;color:var(--muted)}
+.item.past{opacity:.55}
+.agg-prev{max-height:38vh;overflow:auto;margin:0 0 12px}
+.agg-prev .item{padding:9px 12px}
+.seg.bseg button{padding:8px 2px}
 @keyframes fade{from{opacity:0}}
 /* tab change by swipe: the new tab slides in from the side it came from */
 #view.from-r{animation:fromR .22s ease}
@@ -342,7 +350,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 16;
+const APP_VERSION = 17;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -361,7 +369,7 @@ const ICON = {
 
 /* ---------- state ---------- */
 const S = {
-  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], sube:null, vault:null, bseg:"sube", iq:"", lastBackup:null, failed:null, badRaw:null,
+  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], sube:null, vault:null, agg:[], aggK:"", aggAll:false, bseg:"sube", iq:"", lastBackup:null, failed:null, badRaw:null,
   tab:"ajanda", cursor:null, monthFilter:"all", q:"", catSel:loadCatSel(), filterOpen:false
 };
 
@@ -697,6 +705,7 @@ function load(){
     S.infos = cleanInfos(d.infos);  // the old free-form cards: no longer shown, kept so nothing is thrown away
     S.sube = cleanSube(d.sube);
     S.vault = cleanVault(d.vault);
+    S.agg = cleanAgg(d.agg);
     S.lastBackup = typeof d.lastBackup === "string" ? d.lastBackup : null;
     if((d.schema || 1) < SCHEMA){
       // keep the pre-upgrade copy once, in case the upgrade gets something wrong
@@ -704,7 +713,7 @@ function load(){
       persist();
     }
   } catch(e){
-    S.items = []; S.months = {}; S.infos = []; S.cats = DEFAULT_CATS.map(c => ({...c}));
+    S.items = []; S.months = {}; S.infos = []; S.agg = []; S.cats = DEFAULT_CATS.map(c => ({...c}));
     S.failed = "Kayıtlı veriler okunamadı. Hiçbir şey silinmedi: önce ⋯ menüsünden ham veriyi yedek olarak alın, sonra yedekten geri yükleyin.";
     S.badRaw = raw;
     try { if(raw && localStorage.getItem(BAD_KEY) !== raw) localStorage.setItem(BAD_KEY, raw); } catch(e2){}
@@ -716,7 +725,7 @@ function persist(){
     return false;
   }
   try {
-    localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, vault:S.vault, lastBackup:S.lastBackup}));
+    localStorage.setItem(KEY, JSON.stringify({version:1, schema:SCHEMA, items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, vault:S.vault, agg:S.agg, lastBackup:S.lastBackup}));
     return true;
   } catch(e){
     toast("Kaydedilemedi: telefonda yer kalmamış olabilir. Hemen yedek alın.");
@@ -1170,13 +1179,13 @@ function openFieldsEditor(backTo){
 /* ---------- bilgiler: Şubeler | Genel | Kartlar ---------- */
 function viewBilgiler(){
   const seg = S.bseg || "sube";
-  const segs = [["sube","Şubeler"],["genel","Genel"],["kart","Kartlar"]];
+  const segs = [["sube","Şubeler"],["genel","Genel"],["kart","Kartlar"],["agg","Aggregator"]];
   const bar = `<div class="seg bseg" role="group" aria-label="Bilgiler">${segs.map(([k, l]) => `<button type="button" data-act="bseg" data-seg="${k}" aria-pressed="${seg === k}">${l}</button>`).join("")}</div>`;
-  return bar + (seg === "genel" ? viewGenel() : seg === "kart" ? viewKartlar() : viewSubeler());
+  return bar + (seg === "genel" ? viewGenel() : seg === "kart" ? viewKartlar() : seg === "agg" ? viewAgg() : viewSubeler());
 }
 function setBseg(seg){
   if(S.bseg === "kart" && seg !== "kart") lockVault();
-  S.bseg = seg; S.iq = ""; render(); window.scrollTo(0, 0);
+  S.bseg = seg; S.iq = ""; S.aggAll = false; render(); window.scrollTo(0, 0);
 }
 
 /* ---- Genel: free-form cards for company-wide information (no PIN) ---- */
@@ -1436,6 +1445,198 @@ function openCardEditor(id){
   });
 }
 
+/* ---- Aggregator: when the online channels (Yemek Sepeti, Migros, Trendyol…) pay out each period ----
+   Only for looking dates up; it counts in no total. Rows come from the channel's monthly calendar PDF, or its
+   text pasted in: channel, period, payout date, and an amount only if typed in by hand. */
+const KNOWN_KANAL = ["Yemek Sepeti", "Migros", "Trendyol", "Getir"];
+const TR_WORD = /^[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü .&'-]*$/;
+const cleanAgg = list => (Array.isArray(list) ? list : []).filter(isObj).map(r => ({
+  id: String(r.id ?? "") || newId(), kanal: String(r.kanal ?? "").trim(), donem: String(r.donem ?? "").trim(), date: String(r.date ?? ""), amount: numOrNull(r.amount)
+})).filter(r => r.kanal && isDate(r.date));
+// The same channel, period and date is the same row, however the period was spaced ("03 - 09" / "03-09").
+const aggKey = r => [r.kanal, r.donem.replace(/\s+/g, ""), r.date].join("|").toLocaleLowerCase("tr");
+const aggKanals = () => [...new Set(S.agg.map(r => r.kanal))].sort((a, b) => a.localeCompare(b, "tr"));
+const kanalHue = k => HUES[Math.max(0, aggKanals().indexOf(k)) % HUES.length];
+// Reads "Migros  27 Ekim-2 Kasım  06.11.2026 Cuma" rows. Each date ends a row: the words before the first digit
+// are the channel, the rest is the period. Rows without a channel (the calendar's first page lists the same
+// dates column by column, under headers) are skipped. `strict` is for one table row per line; otherwise the
+// whole text is one run and only a known channel name, or a short one, is taken as the channel.
+function aggRows(text, strict){
+  const t = String(text).replace(/(\d{4})\s+(?:Pazartesi|Salı|Çarşamba|Perşembe|Cuma|Cumartesi|Pazar)(?![A-Za-zÇĞİÖŞÜçğıöşü])/gi, "$1").replace(/\s+/g, " ");
+  const known = [...KNOWN_KANAL, ...aggKanals()];
+  const re = /(\d{1,2})[./](\d{1,2})[./](\d{4})/g;
+  const out = []; let last = 0, m;
+  while((m = re.exec(t))){
+    const seg = t.slice(last, m.index).trim(); last = re.lastIndex;
+    const date = `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+    const s = /^(\D*?)\s*(\d.*)$/.exec(seg);
+    if(!isDate(date) || !s) continue;
+    let kanal = s[1].replace(/[\s|:;,.–-]+$/, "").trim();
+    const donem = s[2].replace(/\s*[-–]\s*/g, "-").trim();
+    const k = known.find(k => kanal.toLocaleLowerCase("tr").endsWith(k.toLocaleLowerCase("tr")));
+    if(k) kanal = k;
+    else if(!kanal || !TR_WORD.test(kanal) || kanal.split(" ").length > (strict ? 3 : 2)) continue;
+    if(donem.length > 40) continue;
+    out.push({kanal, donem, date, amount: null});
+  }
+  return out;
+}
+function parseAgg(text){
+  let rows = String(text).split(/\r?\n/).flatMap(l => aggRows(l, true));
+  if(!rows.length) rows = aggRows(text, false);  // pasted with every cell on its own line
+  const seen = new Set();
+  return rows.filter(r => !seen.has(aggKey(r)) && seen.add(aggKey(r))).sort((a, b) => a.date.localeCompare(b.date) || a.kanal.localeCompare(b.kanal, "tr"));
+}
+// pdf.js is only fetched the first time a PDF is picked; the service worker keeps it for offline use.
+let pdfLib = null;
+function loadPdfJs(){
+  if(!pdfLib) pdfLib = new Promise((res, rej) => {
+    const s = document.createElement("script"); s.src = "lib/pdfjs/pdf.min.js";
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdfjs/pdf.worker.min.js"; res(window.pdfjsLib); };
+    s.onerror = () => { pdfLib = null; s.remove(); rej(new Error("pdfjs")); };
+    document.head.appendChild(s);
+  });
+  return pdfLib;
+}
+// The PDF's text, one line per table row: pieces at the same height are joined left to right.
+async function pdfText(file){
+  const lib = await loadPdfJs();
+  const doc = await lib.getDocument({data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false}).promise;
+  const lines = [];
+  try {
+    for(let p = 1; p <= doc.numPages; p++){
+      const tc = await (await doc.getPage(p)).getTextContent();
+      const rows = [];
+      for(const it of tc.items){
+        if(!it.str || !it.str.trim()) continue;
+        const x = it.transform[4], y = it.transform[5];
+        let r = rows.find(r => Math.abs(r.y - y) < 3); if(!r) rows.push(r = {y, parts: []});
+        r.parts.push({x, end: x + (it.width || 0), s: it.str});
+      }
+      rows.sort((a, b) => b.y - a.y);
+      for(const r of rows){
+        r.parts.sort((a, b) => a.x - b.x);
+        let line = "", end = null;
+        for(const q of r.parts){ if(end != null && q.x - end > 1) line += " "; line += q.s; end = q.end; }
+        lines.push(line);
+      }
+    }
+  } finally { doc.destroy(); }
+  return lines.join("\n");
+}
+function aggRowHTML(r, t, edit){
+  const d = daysBetween(t, r.date);
+  const amt = r.amount != null ? `<small class="num">${tl(r.amount)}</small>` : "";
+  const right = d < 0 ? (amt ? `<div class="agg-rel">${amt}</div>` : "")
+    : `<div class="agg-rel${d === 0 ? " today" : d <= 2 ? " soon" : ""}">${d === 0 ? "Bugün" : d === 1 ? "Yarın" : `${d} gün sonra`}${amt}</div>`;
+  const body = `<span class="name">${esc(r.donem || "—")}</span><span class="meta"><span class="tag" style="--h:${kanalHue(r.kanal)}">${esc(r.kanal)}</span><span>${esc(fd(fmtDay, r.date))}</span></span>`;
+  return `<div class="item${d < 0 ? " past" : ""}">${edit ? `<button class="main" type="button" data-act="agg-edit" data-id="${esc(r.id)}">${body}</button>` : `<div class="main">${body}</div>`}${right}</div>`;
+}
+function viewAgg(){
+  if(!S.agg.length) return `<div class="state"><h2>Henüz liste yok</h2>Yemek Sepeti, Migros, Trendyol gibi kanalların aylık ödeme takvimini PDF'den ya da metni yapıştırarak ekleyin.<div class="btns" style="margin-top:18px"><button class="btn primary" type="button" data-act="agg-import">Liste ekle</button></div></div>`;
+  const kanals = aggKanals();
+  if(S.aggK && !kanals.includes(S.aggK)) S.aggK = "";
+  const t = iso(todayDate()), q = S.iq.trim().toLocaleLowerCase("tr");
+  const list = S.agg.filter(r => (!S.aggK || r.kanal === S.aggK) && (!q || `${r.kanal} ${r.donem}`.toLocaleLowerCase("tr").includes(q)));
+  const next = list.filter(r => r.date >= t).sort((a, b) => a.date.localeCompare(b.date) || a.kanal.localeCompare(b.kanal, "tr"));
+  const past = list.filter(r => r.date < t).sort((a, b) => b.date.localeCompare(a.date) || a.kanal.localeCompare(b.kanal, "tr"));
+  let h = kanals.length > 1 ? `<div class="chips" role="group" aria-label="Kanal" style="padding-top:0;margin-bottom:10px">${["", ...kanals].map(k => `<button class="chip" type="button" data-act="agg-k" data-k="${esc(k)}" aria-pressed="${S.aggK === k}">${esc(k || "Tümü")}</button>`).join("")}</div>` : "";
+  h += `<label class="search" for="iq">${ICON.search}<input id="iq" type="search" placeholder="Dönem ara, örn. 15 Kasım" value="${esc(S.iq)}" autocomplete="off"></label>`;
+  if(!list.length) return h + `<div class="state"><h2>Sonuç yok</h2>Farklı bir kelimeyle arayın.</div>`;
+  h += `<section class="section"><div class="sec-head"><h2>Bekleyen <span class="count">${next.length}</span></h2></div>
+    <div class="list">${next.length ? next.map(r => aggRowHTML(r, t, true)).join("") : `<div class="empty-line">Tarihi gelmemiş ödeme yok.</div>`}</div></section>`;
+  if(past.length){
+    const shown = S.aggAll ? past : past.slice(0, 15);
+    h += `<section class="section"><div class="sec-head"><h2>Geçenler <span class="count">${past.length}</span></h2></div>
+      <div class="list">${shown.map(r => aggRowHTML(r, t, true)).join("")}</div>
+      ${shown.length < past.length ? `<button class="btn ghost wide" type="button" data-act="agg-all">Tümünü göster (${past.length})</button>` : ""}</section>`;
+  }
+  return h + `<button class="btn wide" type="button" data-act="agg-import">Liste ekle</button>`;
+}
+function openAggImport(){
+  let fresh = [];
+  openSheet(`
+    <h3>Aggregator listesi ekle</h3>
+    <p class="lead">Ayın ödeme takvimi PDF'sini seçin ya da tablonun metnini yapıştırın. Kayıtlı satırlar tekrar eklenmez.</p>
+    <div class="field"><label for="agFile">PDF dosyası</label><input id="agFile" type="file" accept=".pdf,application/pdf,.txt,text/plain"></div>
+    <div class="field"><label for="agTxt">veya metni yapıştırın</label><textarea id="agTxt" placeholder="Migros  27 Ekim-2 Kasım  06.11.2026 Cuma"></textarea></div>
+    <p class="err" id="agErr"></p>
+    <div id="agPrev"></div>
+    <div class="btns"><button class="btn primary" type="button" id="agAdd" disabled>Ekle</button><button class="btn ghost" type="button" id="agCancel">Vazgeç</button></div>`, sh => {
+    const err = sh.querySelector("#agErr"), prev = sh.querySelector("#agPrev"), add = sh.querySelector("#agAdd");
+    const show = text => {
+      const found = parseAgg(text), have = new Set(S.agg.map(aggKey));
+      fresh = found.filter(r => !have.has(aggKey(r)));
+      const dup = found.length - fresh.length, t = iso(todayDate());
+      err.textContent = text.trim() && !found.length ? "Bu metinde kanal, dönem ve tarih içeren satır bulunamadı." : "";
+      prev.innerHTML = found.length ? `<p class="lead"><b>${found.length} satır bulundu</b>${dup ? `, ${dup} tanesi zaten kayıtlı` : ""}.</p>
+        ${fresh.length ? `<div class="list agg-prev">${fresh.map(r => aggRowHTML(r, t, false)).join("")}</div>` : ""}` : "";
+      add.disabled = !fresh.length;
+      add.textContent = fresh.length ? `${fresh.length} satırı ekle` : "Ekle";
+    };
+    sh.querySelector("#agTxt").addEventListener("input", e => show(e.target.value));
+    sh.querySelector("#agFile").onchange = async e => {
+      const f = e.target.files[0]; if(!f) return;
+      err.textContent = "Dosya okunuyor…"; prev.innerHTML = ""; add.disabled = true;
+      try {
+        const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+        show(isPdf ? await pdfText(f) : await f.text());
+      } catch(x){
+        err.textContent = x && x.message === "pdfjs" ? "PDF okuyucu yüklenemedi. İnternete bağlanıp tekrar deneyin ya da metni yapıştırın." : "Dosya okunamadı. Başka bir dosya seçin ya da metni yapıştırın.";
+      }
+    };
+    sh.querySelector("#agCancel").onclick = closeSheet;
+    add.onclick = () => {
+      if(!fresh.length) return;
+      const before = S.agg;
+      S.agg = [...S.agg, ...fresh.map(r => ({...r, id: newId()}))];
+      if(!persist()){ S.agg = before; err.textContent = dbErr(); return; }
+      S.aggK = ""; S.iq = "";
+      closeSheet(); render(); toast(`${fresh.length} ödeme tarihi eklendi`);
+    };
+  });
+}
+function openAggEdit(id){
+  const r = S.agg.find(x => x.id === id); if(!r) return;
+  openSheet(`
+    <h3>${esc(r.kanal)}</h3>
+    <p class="lead">${esc(r.donem)} dönemi</p>
+    <div class="two">
+      <div class="field"><label for="agK">Kanal</label><input id="agK" value="${esc(r.kanal)}" autocomplete="off"></div>
+      <div class="field"><label for="agD">Dönem</label><input id="agD" value="${esc(r.donem)}" autocomplete="off"></div>
+    </div>
+    <div class="two">
+      <div class="field"><label for="agDt">Ödeme günü</label><input id="agDt" type="date" value="${esc(r.date)}"></div>
+      <div class="field"><label for="agA">Tutar <small class="opt">isteğe bağlı</small></label><input id="agA" data-money inputmode="decimal" value="${esc(amountInput(r.amount))}"></div>
+    </div>
+    <p class="err" id="agErr"></p>
+    <div class="btns">
+      <button class="btn primary" type="button" id="agSave">Kaydet</button>
+      <button class="btn danger" type="button" id="agDel">Bu satırı sil</button>
+      <button class="btn ghost" type="button" id="agCancel">Vazgeç</button>
+    </div>`, sh => {
+    const err = sh.querySelector("#agErr");
+    const store = list => { const before = S.agg; S.agg = list; if(!persist()){ S.agg = before; err.textContent = dbErr(); return false; } return true; };
+    sh.querySelector("#agCancel").onclick = closeSheet;
+    const del = sh.querySelector("#agDel");
+    del.onclick = () => {
+      if(del.dataset.confirm !== "1"){ del.dataset.confirm = "1"; del.textContent = "Silmek için tekrar dokunun"; return; }
+      if(!store(S.agg.filter(x => x.id !== id))) return;
+      closeSheet(); render();
+      toast(`${r.kanal} ${r.donem} silindi`, "Geri al", () => { S.agg = [...S.agg, r]; persist(); render(); });
+    };
+    sh.querySelector("#agSave").onclick = () => {
+      const kanal = sh.querySelector("#agK").value.trim(), donem = sh.querySelector("#agD").value.trim(), date = sh.querySelector("#agDt").value;
+      const raw = sh.querySelector("#agA").value.trim(), amount = raw ? parseAmount(raw) : null;
+      if(!kanal){ err.textContent = "Kanal adını yazın."; return; }
+      if(!isDate(date)){ err.textContent = "Ödeme gününü seçin."; return; }
+      if(Number.isNaN(amount)){ err.textContent = "Tutarı rakamla yazın, örneğin 12.500,00."; return; }
+      if(!store(S.agg.map(x => x.id === id ? {...x, kanal, donem, date, amount} : x))) return;
+      closeSheet(); render(); toast("Kaydedildi");
+    };
+  });
+}
+
 function backupNag(){
   if(S.tab !== "ajanda") return "";
   const lb = S.lastBackup ? new Date(S.lastBackup) : null;
@@ -1448,7 +1649,7 @@ function backupNag(){
 /* ---------- render ---------- */
 function render(){
   const v = $("#view");
-  const titles = {ajanda:"Yaklaşan ödemeler", ay:"Aylık görünüm", kalemler:"Ödeme kalemleri", bilgiler:"Şube bilgileri"};
+  const titles = {ajanda:"Yaklaşan ödemeler", ay:"Aylık görünüm", kalemler:"Ödeme kalemleri", bilgiler:"Bilgiler"};
   $("#title").textContent = titles[S.tab];
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab===S.tab ? "page" : "false"));
   if(S.failed){ v.innerHTML = `<div class="state"><h2>Veriler açılamadı</h2>${esc(S.failed)}<div class="btns" style="margin-top:16px"><button class="btn primary" type="button" data-act="backup">Ham veriyi yedekle / geri yükle</button></div></div>`; return; }
@@ -1517,6 +1718,10 @@ document.addEventListener("click", e => {
   else if(act === "vault-forgot") vaultForgot(el);
   else if(act === "vault-lock") lockVault();
   else if(act === "pin-change") openPinChange();
+  else if(act === "agg-import") openAggImport();
+  else if(act === "agg-edit") openAggEdit(el.dataset.id);
+  else if(act === "agg-k"){ S.aggK = el.dataset.k; S.aggAll = false; render(); }
+  else if(act === "agg-all"){ S.aggAll = true; render(); }
   else if(act === "co-edit") openCompanyEditor();
   else if(act === "br-new") openBranchEditor(null);
   else if(act === "br-edit") openBranchEditor(el.dataset.id);
@@ -1539,7 +1744,7 @@ document.addEventListener("input", e => {
   if(e.target.id === "q"){ S.q = e.target.value; render(); }
   if(e.target.id === "iq"){ S.iq = e.target.value; render(); }
 });
-$("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten geri yükleyin.") : S.tab === "bilgiler" ? (S.bseg === "genel" ? openGeneralEditor(null) : S.bseg === "kart" ? (V.key ? openCardEditor(null) : toast("Önce kartların kilidini açın.")) : openBranchEditor(null)) : openEditor(null);
+$("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten geri yükleyin.") : S.tab === "bilgiler" ? (S.bseg === "genel" ? openGeneralEditor(null) : S.bseg === "kart" ? (V.key ? openCardEditor(null) : toast("Önce kartların kilidini açın.")) : S.bseg === "agg" ? openAggImport() : openBranchEditor(null)) : openEditor(null);
 $("#menuBtn").onclick = openMenu;
 
 function setTab(tab){
@@ -1985,7 +2190,7 @@ function openCats(){
 }
 
 function backupData(){
-  return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, vault:S.vault};
+  return {app:"odeme-takvimi", version:1, schema:SCHEMA, exported:new Date().toISOString(), items:S.items, months:S.months, cats:S.cats, infos:S.infos, sube:S.sube, vault:S.vault, agg:S.agg};
 }
 function markBackedUp(){ if(S.failed) return; S.lastBackup = new Date().toISOString(); persist(); render(); }
 // While saved data cannot be read, "backup" hands out that unreadable text untouched, so it can still be rescued.
@@ -2077,11 +2282,13 @@ function openMenu(){
       if(!data || !Array.isArray(data.items)){ msg.textContent = "Yedekte ödeme kalemi bulunamadı."; return; }
       const items = data.items.filter(i => i && i.id && i.name);
       const replacesSube = isObj(data.sube) && S.sube.branches.length;
-      if((S.items.length || replacesSube) && imp.dataset.confirm !== "1"){
+      const replacesAgg = Array.isArray(data.agg) && S.agg.length;
+      if((S.items.length || replacesSube || replacesAgg) && imp.dataset.confirm !== "1"){
         imp.dataset.confirm = "1";
         const parts = [];
         if(S.items.length) parts.push(`mevcut ${S.items.length} kalemin yerine ${items.length} kalem`);
         if(replacesSube) parts.push(`${S.sube.branches.length} şubenin yerine ${cleanSube(data.sube).branches.length} şube`);
+        if(replacesAgg) parts.push(`${S.agg.length} Aggregator satırının yerine ${cleanAgg(data.agg).length} satır`);
         imp.textContent = `${parts.join(" ve ")} yüklensin mi? Onaylamak için tekrar dokunun`.replace(/^./, c => c.toLocaleUpperCase("tr"));
         return;
       }
@@ -2097,9 +2304,10 @@ function openMenu(){
         if(!Array.isArray(data.sube.general)) sube.general = S.sube.general;
         S.sube = sube;
       }
-      const prevVault = S.vault;
+      const prevVault = S.vault, prevAgg = S.agg;
       if(isObj(data.vault)){ S.vault = cleanVault(data.vault); lockVault(); }  // cards open with the PIN they were saved under
-      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; S.sube = prevSube; S.vault = prevVault; S.failed = prevFailed; msg.textContent = dbErr(); return; }
+      if(Array.isArray(data.agg)) S.agg = cleanAgg(data.agg);  // a backup from before Aggregator keeps the current list
+      if(!persist()){ S.items = prev.items; S.months = prev.months; S.cats = prev.cats; S.infos = prevInfos; S.sube = prevSube; S.vault = prevVault; S.agg = prevAgg; S.failed = prevFailed; msg.textContent = dbErr(); return; }
       S.badRaw = null;
       closeSheet(); render(); toast(`${mig.items.length} kalem yedekten yüklendi`);
     };

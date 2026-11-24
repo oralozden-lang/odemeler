@@ -1,6 +1,9 @@
 // Ödemeler service worker: keeps the app usable offline.
 // Bump VERSION whenever index.html, sw.js or the icons change: that is what tells an open app a new version is ready.
-const VERSION = "odemeler-v16";
+const VERSION = "odemeler-v17";
+// pdf.js (lib/) is only fetched when a PDF is first read. It lives in its own cache, named after its version,
+// so an app update does not throw it away and PDFs keep opening offline.
+const LIB = "odemeler-lib-pdfjs-3.11.174";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/apple-touch-icon.png"];
 const PAGE = "index.html";
 const NET_WAIT = 3500;  // on a weak connection, show the saved copy after this many ms rather than a blank screen
@@ -14,7 +17,7 @@ self.addEventListener("install", e => {
 self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== VERSION && k !== LIB).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -63,9 +66,10 @@ self.addEventListener("fetch", e => {
   // Own files and Google Fonts: serve from cache, fetch and store on first use.
   const isFont = url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
   if(url.origin === self.location.origin || isFont){
+    const store = url.origin === self.location.origin && url.pathname.startsWith(new URL("lib/", self.registration.scope).pathname) ? LIB : VERSION;
     e.respondWith(
       caches.match(req).then(hit => hit || fetch(req).then(res => {
-        if(res && (res.ok || res.type === "opaque")){ const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+        if(res && (res.ok || res.type === "opaque")){ const copy = res.clone(); caches.open(store).then(c => c.put(req, copy)); }
         return res;
       }))
     );
