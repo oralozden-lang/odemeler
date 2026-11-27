@@ -277,6 +277,21 @@ input.pin:focus{border-color:var(--accent);background:var(--surface)}
 .dayrow button{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:0 10px;min-height:44px;font-size:13.5px;font-weight:700;color:var(--muted);white-space:nowrap}
 .dayrow button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);grid-column:1/-1}
 .dayrow input[hidden]{display:none}
+#view .item[data-period]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.item.sel{background:var(--accent-soft)}
+.item.sel::after{content:"";position:absolute;inset:0;border:2px solid var(--accent);border-radius:inherit;pointer-events:none}
+.selbar{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 86px);max-width:596px;margin:0 auto;z-index:22;display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--bg);border-radius:18px;padding:8px 8px 8px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25);animation:up .15s ease}
+.selbar .si{display:grid;flex:1;min-width:0;line-height:1.25}
+.selbar .si span{font-size:12.5px;font-weight:600;color:#B9C6CE}
+.selbar .si b{font-size:18px;font-family:var(--font-display)}
+.selbar button{border:0;border-radius:12px;min-height:44px;font-weight:800}
+.selbar .cp{background:var(--hero-fill);color:var(--hero);padding:0 14px}
+.selbar .x{background:transparent;color:var(--bg);width:44px;font-size:22px}
+body.selecting .fab{display:none}
+.saved{color:var(--ok);font-weight:800;font-size:16px;margin-left:6px;line-height:1}
+.brfield{margin:-4px 0 12px}
+.brall-h{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 8px;font-size:13px;font-weight:700;color:var(--muted)}
+.bv b.none{color:var(--muted);font-weight:600}
 .agg-rel{flex:none;text-align:right;font-weight:800;font-size:14px;color:var(--accent);white-space:nowrap}
 .agg-rel.soon{color:var(--warn)}
 .agg-rel.today{color:var(--ok)}
@@ -357,7 +372,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 19;
+const APP_VERSION = 20;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -376,7 +391,7 @@ const ICON = {
 
 /* ---------- state ---------- */
 const S = {
-  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], sube:null, vault:null, agg:[], aggK:"", aggAll:false, bseg:"sube", iq:"", lastBackup:null, failed:null, badRaw:null,
+  items:[], months:{}, cats:DEFAULT_CATS.map(c => ({...c})), infos:[], sube:null, vault:null, agg:[], aggK:"", aggAll:false, brField:"", bseg:"sube", iq:"", lastBackup:null, failed:null, badRaw:null,
   tab:"ajanda", cursor:null, monthFilter:"all", q:"", catSel:loadCatSel(), filterOpen:false
 };
 
@@ -811,7 +826,7 @@ function rowHTML(o, opts = {}){
   const relCls = (!o.paid && d >= 0 && d <= 2) ? "rel soon" : "rel";
   const showDate = opts.hideDate ? "" : `<span>${esc(fd(fmtDay, o.date))}</span>`;
   const relPart = o.paid ? `<span class="rel" style="color:var(--ok)">Ödendi</span>` : `<span class="${relCls}">${rel}</span>`;
-  return `<div class="item${o.paid?" paid":""}${late?" late":""}" data-id="${esc(o.it.id)}" data-period="${o.period}">
+  return `<div class="item${o.paid?" paid":""}${late?" late":""}${SEL.keys.has(o.period + "|" + o.it.id)?" sel":""}" data-id="${esc(o.it.id)}" data-period="${o.period}">
     <button class="check" type="button" data-act="toggle" aria-label="${o.paid?"Ödenmedi olarak geri al":"Ödendi olarak işaretle"}: ${esc(o.it.name)}">${ICON.check}</button>
     <button class="main" type="button" data-act="open">
       <span class="name">${esc(o.it.name)}</span>
@@ -1036,19 +1051,25 @@ function viewSubeler(){
     if(!hits.length) return h + `<div class="state"><h2>Sonuç yok</h2>Farklı bir kelimeyle arayın.</div>`;
     return h + `<section class="section"><div class="list">${hits.map(({b, f}) => `<div class="item"><button class="main" type="button" data-act="br-pick" data-id="${esc(b.id)}"><span class="name">${esc(brName(b))}</span><span class="meta">${f && f.id !== "ad" ? esc(f.label + ": " + b.v[f.id]) : f ? "Şube adı" : "Notta geçiyor"}</span></button></div>`).join("")}</div></section>`;
   }
-  const b = selBranch();
-  h += `<div class="brbar"><label class="brsel"><span>Şube</span><select id="brSel" aria-label="Şube seç">${list.map(x => `<option value="${esc(x.id)}" ${x.id === b.id ? "selected" : ""}>${esc(brName(x))}</option>`).join("")}</select></label>
+  // "Tüm şubeler": every branch's card one under another, or with one field picked, that field for every branch
+  const all = S.sube.sel === ALL_BR;
+  const b = all ? null : selBranch();
+  h += `<div class="brbar"><label class="brsel"><span>Şube</span><select id="brSel" aria-label="Şube seç"><option value="${ALL_BR}" ${all ? "selected" : ""}>Tüm şubeler</option>${list.map(x => `<option value="${esc(x.id)}" ${!all && x.id === b.id ? "selected" : ""}>${esc(brName(x))}</option>`).join("")}</select></label>
     <button class="btn" type="button" data-act="br-new">+ Şube</button></div>`;
-  const rows = S.sube.fields.filter(f => f.id !== "ad" && b.v[f.id]).map(f => {
-    const v = f.id === "tel" ? fmtPhone(b.v[f.id]) : b.v[f.id];
-    return `<div class="brow"><div class="bv"><span>${esc(f.label)}</span><b>${esc(v)}</b></div>${actBtns(v, `${brName(b)} · ${f.label}: ${v}`, f.id === "tel" ? v : null)}</div>`;
-  }).join("");
+  if(all){
+    const fields = S.sube.fields.filter(f => f.id !== "ad");
+    const f = fields.find(x => x.id === S.brField) || null;
+    h += `<label class="brsel brfield"><span>Bilgi</span><select id="brField" aria-label="Gösterilecek bilgi"><option value="">Tümü</option>${fields.map(x => `<option value="${esc(x.id)}" ${f && f.id === x.id ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select></label>`;
+    if(!f) return h + `<div class="brall-h"><span>${list.length} şube</span></div>` + list.map(x => brCardHTML(x, true)).join("");
+    const val = x => x.v[f.id] ? (f.id === "tel" ? fmtPhone(x.v[f.id]) : x.v[f.id]) : "";
+    const txt = list.filter(val).map(x => `${brName(x)}: ${val(x)}`).join("\n");
+    return h + `<article class="icard"><header><h3>${esc(f.label)}</h3></header>
+      ${list.map(x => { const v = val(x); return `<div class="brow"><div class="bv"><span>${esc(brName(x))}</span>${v ? `<b>${esc(v)}</b>` : `<b class="none">Girilmedi</b>`}</div>${v ? actBtns(v, `${brName(x)} · ${f.label}: ${v}`, f.id === "tel" ? v : null) : ""}</div>`; }).join("")}
+      ${txt ? `<div class="btns two-btn" style="margin-top:8px"><button class="btn primary" type="button" data-act="copy" data-v="${esc(txt)}">${IC2.copy} Kopyala</button><button class="btn" type="button" data-act="share" data-v="${esc(txt)}">${IC2.share} Paylaş</button></div>` : ""}
+    </article>`;
+  }
   const inv = invoiceText(b);
-  h += `<article class="icard brcard">
-    <header><h3>${esc(brName(b))}</h3><button class="ed" type="button" data-act="br-edit" data-id="${esc(b.id)}">Düzenle</button></header>
-    ${rows || `<div class="empty-line" style="padding:10px 0">Bu şubenin bilgisi girilmedi. Düzenle'ye dokunun.</div>`}
-    ${b.note ? `<div class="inote">${esc(b.note)}</div>` : ""}
-  </article>
+  h += brCardHTML(b, false) + `
   <article class="icard invcard">
     <header><h3>Fatura bilgileri</h3></header>
     ${S.sube.company.name ? `<pre class="invtext">${esc(inv)}</pre>
@@ -1056,6 +1077,19 @@ function viewSubeler(){
     : `<p class="empty-line" style="padding:4px 0 10px">Önce yukarıdaki şirket fatura bilgilerini girin.</p>`}
   </article>`;
   return h;
+}
+const ALL_BR = "*";
+function brCardHTML(b, withInvoice){
+  const rows = S.sube.fields.filter(f => f.id !== "ad" && b.v[f.id]).map(f => {
+    const v = f.id === "tel" ? fmtPhone(b.v[f.id]) : b.v[f.id];
+    return `<div class="brow"><div class="bv"><span>${esc(f.label)}</span><b>${esc(v)}</b></div>${actBtns(v, `${brName(b)} · ${f.label}: ${v}`, f.id === "tel" ? v : null)}</div>`;
+  }).join("");
+  return `<article class="icard brcard">
+    <header><h3>${esc(brName(b))}</h3><button class="ed" type="button" data-act="br-edit" data-id="${esc(b.id)}">Düzenle</button></header>
+    ${rows || `<div class="empty-line" style="padding:10px 0">Bu şubenin bilgisi girilmedi. Düzenle'ye dokunun.</div>`}
+    ${b.note ? `<div class="inote">${esc(b.note)}</div>` : ""}
+    ${withInvoice && S.sube.company.name ? `<button class="btn wide copyall" type="button" data-act="copy" data-v="${esc(invoiceText(b))}">${IC2.copy} Fatura bilgisini kopyala</button>` : ""}
+  </article>`;
 }
 async function copyValue(v){
   try { await navigator.clipboard.writeText(v); toast(`Kopyalandı: ${v.length > 40 ? v.slice(0,40).replace(/\n/g, " ")+"…" : v.replace(/\n/g, " ")}`); }
@@ -1665,8 +1699,72 @@ function backupNag(){
   return `<button class="banner nag" type="button" data-act="backup"><span>${esc(msg)}</span><b>Yedek al</b></button>`;
 }
 
+/* ---------- several payments picked: their total ----------
+   A long press on a payment row (Yaklaşan, Aylık) starts picking; then a tap picks or drops a row. The bar above
+   the tabs shows the total and copies it (no thousands dots, like every copied amount). Picking sits on its own
+   history entry, so Android's back button ends it. Rows without an amount are counted but add nothing. */
+const SEL = {keys: new Set(), entry: false};
+function selBar(){
+  let bar = $(".selbar");
+  document.body.classList.toggle("selecting", SEL.keys.size > 0);
+  if(!SEL.keys.size){ if(bar) bar.remove(); return; }
+  let total = 0, none = 0;
+  for(const k of SEL.keys){
+    const [period, id] = [k.slice(0, 7), k.slice(8)];
+    const o = findOcc(id, period);
+    if(!o || o.amt == null) none++; else total += o.amt;
+  }
+  total = Math.round(total * 100) / 100;
+  if(!bar){
+    bar = document.createElement("div"); bar.className = "selbar"; bar.setAttribute("role", "status");
+    bar.addEventListener("click", e => {
+      const b = e.target.closest("button"); if(!b) return;
+      if(b.classList.contains("x")) endSel();
+      else { const t = b.dataset.v; navigator.clipboard.writeText(t).then(() => toast(`Kopyalandı: ${t}`), () => toast("Kopyalanamadı.")); }
+    });
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `<span class="si"><span>${SEL.keys.size} seçili${none ? ` · ${none} kalemin tutarı yok` : ""}</span><b class="num">${tl(total)}</b></span>
+    <button class="cp" type="button" data-v="${plainAmount(total)}">Kopyala</button><button class="x" type="button" aria-label="Seçimi bitir">×</button>`;
+}
+function pickRow(row){
+  const k = row.dataset.period + "|" + row.dataset.id;
+  if(SEL.keys.has(k)) SEL.keys.delete(k); else SEL.keys.add(k);
+  if(SEL.keys.size && !SEL.entry){ history.pushState({sel: 1}, "", location.href); SEL.entry = true; }
+  if(!SEL.keys.size) endSel(); else render();
+}
+function endSel(){
+  const had = SEL.keys.size; SEL.keys.clear();
+  if(SEL.entry){ SEL.entry = false; history.back(); }
+  if(had) render();
+}
+let lp = null, lpFired = false;
+document.addEventListener("pointerdown", e => {
+  lpFired = false;
+  const row = e.target.closest("#view .item[data-period]");
+  if(!row || $(".overlay") || e.button > 0) return;
+  lp = {x: e.clientX, y: e.clientY, t: setTimeout(() => {
+    lp = null; lpFired = true;
+    if(!SEL.keys.has(row.dataset.period + "|" + row.dataset.id)) pickRow(row);
+    try { navigator.vibrate && navigator.vibrate(15); } catch(err){}
+  }, 480)};
+}, {passive: true});
+const lpCancel = () => { if(lp){ clearTimeout(lp.t); lp = null; } };
+document.addEventListener("pointermove", e => { if(lp && Math.hypot(e.clientX - lp.x, e.clientY - lp.y) > 10) lpCancel(); }, {passive: true});
+["pointerup", "pointercancel"].forEach(t => document.addEventListener(t, lpCancel, {passive: true}));
+window.addEventListener("scroll", lpCancel, {passive: true});
+// the click that ends a long press must not also open the row; while picking, a tap on a row picks it
+document.addEventListener("click", e => {
+  if(lpFired){ lpFired = false; e.stopPropagation(); e.preventDefault(); return; }
+  if(!SEL.keys.size) return;
+  const row = e.target.closest("#view .item[data-period]");
+  if(row){ e.stopPropagation(); e.preventDefault(); pickRow(row); }
+}, true);
+document.addEventListener("contextmenu", e => { if(e.target.closest("#view .item[data-period]")) e.preventDefault(); });
+
 /* ---------- render ---------- */
 function render(){
+  selBar();
   const v = $("#view");
   const titles = {ajanda:"Yaklaşan ödemeler", ay:"Aylık görünüm", kalemler:"Ödeme kalemleri", bilgiler:"Bilgiler"};
   $("#title").textContent = titles[S.tab];
@@ -1748,7 +1846,8 @@ document.addEventListener("click", e => {
   else if(act === "jump-late"){ const s = document.querySelector(".sec-late"); if(s) s.scrollIntoView({behavior:"smooth", block:"start"}); }
 });
 document.addEventListener("change", e => {
-  if(e.target.id === "brSel"){ S.sube = {...S.sube, sel: e.target.value}; persist(); render(); return; }
+  if(e.target.id === "brSel"){ S.sube = {...S.sube, sel: e.target.value}; S.brField = ""; persist(); render(); return; }
+  if(e.target.id === "brField"){ S.brField = e.target.value; render(); return; }
   const cb = e.target.closest("[data-fcat]"); if(!cb) return;
   const id = cb.dataset.fcat;
   S.catSel = cb.checked ? [...new Set([...S.catSel, id])] : S.catSel.filter(x => x !== id);
@@ -1767,6 +1866,7 @@ $("#fab").onclick = () => S.failed ? toast("Önce kayıtlı verileri yedekten ge
 $("#menuBtn").onclick = openMenu;
 
 function setTab(tab){
+  if(SEL.keys.size) endSel();
   if(tab !== "bilgiler") lockVault();
   S.tab = tab; if(tab==="ay" && !S.cursor) S.cursor = curPeriod();
   if(location.hash !== "#"+tab) history.replaceState(null, "", "#"+tab);
@@ -1813,7 +1913,14 @@ $("#view").addEventListener("animationend", e => { if(e.target.id === "view") e.
 /* ---------- sheets ---------- */
 // Each open sheet sits on its own history entry, so Android's back button closes the sheet instead of the app.
 let sheetEntry = false;
-function removeSheet(){ const o = $(".overlay"); if(o) o.remove(); document.body.style.overflow = ""; }
+function removeSheet(){
+  const o = $(".overlay");
+  if(o){
+    const a = document.activeElement; if(a && o.contains(a)) a.blur();  // fires "change", so a typed amount is kept
+    o.remove();
+  }
+  document.body.style.overflow = "";
+}
 function openSheet(html, onMount){
   removeSheet();
   if(!sheetEntry){ history.pushState({sheet:1}, "", location.href); sheetEntry = true; }
@@ -1828,6 +1935,7 @@ function openSheet(html, onMount){
 }
 function closeSheet(){ removeSheet(); if(sheetEntry){ sheetEntry = false; history.back(); } }
 window.addEventListener("popstate", () => {
+  if(SEL.entry && !sheetEntry){ SEL.entry = false; SEL.keys.clear(); render(); }
   if(sheetEntry){ sheetEntry = false; removeSheet(); }
   // a tab picked while the sheet was open must survive stepping back over the sheet's entry
   if(location.hash !== "#" + S.tab) history.replaceState(null, "", "#" + S.tab);
@@ -1861,13 +1969,12 @@ function openDetail(id, period, focusAmount, keepAmt){
         <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
       </div>` : `
       <div class="two">
-        <div class="field"><label for="pAmt">${k === "variable" ? "Bu ayın tutarı (₺)" : "Ödenen tutar (₺)"}</label><input id="pAmt" data-money inputmode="decimal" placeholder="${k === "variable" && prevAmt != null ? "Geçen ay " + esc(tl(prevAmt)) : "Örn. 92.500,00"}" value="${esc(keepAmt != null ? keepAmt : amountInput(k === "variable" ? entered : o.amt))}" ${focusAmount?"autofocus":""}></div>
+        <div class="field"><label for="pAmt">${k === "variable" ? `Bu ayın tutarı (₺)<span class="saved" id="pSaved" role="status" aria-label="Kaydedildi" hidden>✓</span>` : "Ödenen tutar (₺)"}</label><input id="pAmt" data-money inputmode="decimal" placeholder="${k === "variable" && prevAmt != null ? "Geçen ay " + esc(tl(prevAmt)) : "Örn. 92.500,00"}" value="${esc(keepAmt != null ? keepAmt : amountInput(k === "variable" ? entered : o.amt))}" ${focusAmount?"autofocus":""}></div>
         ${it.once ? "" : `<div class="field"><label for="pDue">Bu ayın vadesi</label><input id="pDue" type="date" value="${o.date}" min="${period}-01" max="${addMonths(period, 1)}-${pad(new Date(Number(period.slice(0,4)), Number(period.slice(5)) + 1, 0).getDate())}"></div>`}
       </div>
       <p class="err" id="pErr"></p>
       <div class="btns">
         <button class="btn ok" type="button" id="pay">Ödendi olarak işaretle</button>
-        ${k === "variable" ? `<button class="btn" type="button" id="saveAmt">Sadece tutarı kaydet (henüz ödenmedi)</button>` : ""}
         <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
       </div>`}`;
   openSheet(html, sh => {
@@ -1894,7 +2001,7 @@ function openDetail(id, period, focusAmount, keepAmt){
     if(pay) pay.onclick = () => {
       let v = readAmt(); if(v === undefined) return;
       const typed = v != null;
-      if(!typed) v = o.amt;  // left empty: the item's own amount for the month
+      if(!typed) v = k === "variable" ? enteredAmount(it, period) : o.amt;  // left empty: the item's own amount for the month
       if(v == null){ sh.querySelector("#pErr").textContent = "Ödenen tutarı yazın."; sh.querySelector("#pAmt").focus(); return; }
       const at = iso(todayDate());
       if(k === "variable" && typed) setAmounts(period, {[id]: v});
@@ -1920,12 +2027,19 @@ function openDetail(id, period, focusAmount, keepAmt){
       if(!setDue(period, id, null)) return;
       render(); reopen(); toast(`Vade kalemin gününe döndü: ${fd(fmtHead, nextWeekday(o.due))}`);
     };
-    const sa = sh.querySelector("#saveAmt");
-    if(sa) sa.onclick = () => {
+    // A variable item's amount for the month is kept as soon as the box is left (or the sheet closes):
+    // no separate save button. Emptying the box removes it.
+    const pAmt = sh.querySelector("#pAmt"), mark = sh.querySelector("#pSaved");
+    if(pAmt && mark) pAmt.addEventListener("change", () => {
       const v = readAmt(); if(v === undefined) return;
-      if(!setAmounts(period, {[id]: v})) return;
-      closeSheet(); render(); toast(v == null ? "Tutar silindi" : `${it.name}: ${tl(v)} kaydedildi`);
-    };
+      if(v === enteredAmount(it, period)) return;
+      if(!setAmounts(period, {[id]: v})){ sh.querySelector("#pErr").textContent = dbErr(); return; }
+      sh.querySelector("#pErr").textContent = "";
+      const dd = sh.querySelector(".kv dd.num"); if(dd) dd.textContent = v == null ? "Girilmedi" : tl(v);
+      mark.setAttribute("aria-label", v == null ? "Silindi" : "Kaydedildi"); mark.hidden = false;
+      clearTimeout(mark._t); mark._t = setTimeout(() => { mark.hidden = true; }, 2500);
+      render();
+    });
   });
 }
 
