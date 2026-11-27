@@ -372,7 +372,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 21;
+const APP_VERSION = 22;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -557,7 +557,10 @@ function amountFor(it, period, paid){
 function loadCatSel(){ try { const v = JSON.parse(localStorage.getItem("odemeler.filter") || "[]"); return Array.isArray(v) ? v : []; } catch(e){ return []; } }
 function saveCatSel(){ try { localStorage.setItem("odemeler.filter", JSON.stringify(S.catSel)); } catch(e){} }
 const inFilter = it => !S.catSel.length || S.catSel.includes(it.cat || "");
-const filtered = list => S.catSel.length ? list.filter(o => inFilter(o.it || o)) : list;
+// The search box (same text on Yaklaşan, Aylık and Kalemler) narrows by item name or note, on top of the category.
+const qMatch = it => { const q = S.q.trim().toLocaleLowerCase("tr"); return !q || (it.name + " " + (it.note || "")).toLocaleLowerCase("tr").includes(q); };
+const filtered = list => S.catSel.length || S.q.trim() ? list.filter(o => inFilter(o.it || o) && qMatch(o.it || o)) : list;
+const searchHTML = () => `<label class="search" for="q">${ICON.search}<input id="q" type="search" placeholder="Kalem veya not ara" value="${esc(S.q)}" autocomplete="off"></label>`;
 function filterLabel(){
   const n = S.catSel.length;
   if(!n) return "Tümü";
@@ -856,7 +859,7 @@ function heroHTML(period){
   const pct = total ? Math.round(paidSum / total * 100) : 0;
   const [y,m] = period.split("-").map(Number);
   return `<div class="hero">
-    <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan${S.catSel.length ? " · filtreli" : ""}</span><span class="big num">${tl(left)}</span></div>
+    <div class="row1"><span class="lbl">${ML[m-1]} ${y} · kalan${S.catSel.length || S.q.trim() ? " · filtreli" : ""}</span><span class="big num">${tl(left)}</span></div>
     <div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div>
     <div class="row2 num"><span>Ödenen <b>${tl(paidSum)}</b></span><span>Toplam <b>${tl(total)}</b></span><span>%${pct}</span></div>
     ${missing ? `<button class="hero-note" type="button" data-act="amounts" data-period="${period}">${missing} kalemin tutarı girilmedi · <b>Tutarları gir</b></button>` : ""}
@@ -864,7 +867,7 @@ function heroHTML(period){
 }
 
 function renewalsHTML(){
-  const due = S.items.filter(inFilter).map(it => ({it, key: renewalDue(it)})).filter(x => x.key);
+  const due = S.items.filter(i => inFilter(i) && qMatch(i)).map(it => ({it, key: renewalDue(it)})).filter(x => x.key);
   if(!due.length) return "";
   return `<section class="section"><div class="sec-head"><h2>Yenilemeler <span class="count">${due.length}</span></h2></div>
     <div class="list">${due.map(({it, key}) => {
@@ -889,18 +892,20 @@ function viewAjanda(){
   const every = occRange(addMonths(cp,-24), addMonths(cp,2)).filter(o => o.it.once || o.it.start || o.period >= lateFloor);
   const all = filtered(every);
   const late = all.filter(o => !o.paid && o.date < t);
-  const hiddenLate = every.filter(o => !o.paid && o.date < t && !inFilter(o.it));
+  const hiddenLate = every.filter(o => !o.paid && o.date < t && qMatch(o.it) && !inFilter(o.it));
   const today = all.filter(o => o.date === t);
   const week = all.filter(o => { const d = daysBetween(t,o.date); return d>=1 && d<=7; });
   const soon = all.filter(o => { const d = daysBetween(t,o.date); return d>=8 && d<=30 && !o.paid; });
-  let h = filterBarHTML() + heroHTML(cp);
+  const searching = !!S.q.trim();
+  let h = searchHTML() + filterBarHTML() + heroHTML(cp);
   if(hiddenLate.length) h += `<button class="alert soft" type="button" data-act="filter-clear">${ICON.alert}<span class="grow">Filtre dışında ${hiddenLate.length} geciken ödeme var</span><b>Göster</b></button>`;
   if(late.length) h += `<button class="alert" type="button" data-act="jump-late">${ICON.alert}<span class="grow">${late.length} ödeme gecikti</span><span class="num">${tl(sum(late))}</span></button>`;
   h += sectionHTML("Gecikenler", late, {cls:"sec-late"});
   h += renewalsHTML();
-  h += sectionHTML("Bugün", today, {showEmpty:true, hideDate:true, emptyText:"Bugün vadesi gelen ödeme yok."});
-  h += sectionHTML("Önümüzdeki 7 gün", week, {showEmpty:true, emptyText:"Bu hafta başka ödeme yok."});
+  h += sectionHTML("Bugün", today, {showEmpty:!searching, hideDate:true, emptyText:"Bugün vadesi gelen ödeme yok."});
+  h += sectionHTML("Önümüzdeki 7 gün", week, {showEmpty:!searching, emptyText:"Bu hafta başka ödeme yok."});
   h += sectionHTML("8–30 gün içinde", soon);
+  if(searching && !late.length && !today.length && !week.length && !soon.length) h += `<div class="state"><h2>Sonuç yok</h2>Önümüzdeki 30 günde bu aramaya uyan ödeme yok.</div>`;
   return h;
 }
 
@@ -917,14 +922,14 @@ function viewAy(){
     <h2>${ML[m-1]} ${y}</h2>
     <button class="icon-btn" type="button" data-act="next" aria-label="Sonraki ay">${ICON.right}</button>
   </div>`;
-  h = filterBarHTML() + h + heroHTML(p);
+  h = searchHTML() + filterBarHTML() + h + heroHTML(p);
   if(varCount) h += `<button class="btn primary wide" type="button" data-act="amounts" data-period="${p}">Bu ayın tutarlarını gir · ${varCount} değişken kalem</button>`;
   h += `<div class="seg" role="group" aria-label="Filtre">
     <button type="button" data-filter="all" aria-pressed="${f==="all"}">Tümü · ${occ.length}</button>
     <button type="button" data-filter="open" aria-pressed="${f==="open"}">Bekleyen · ${occ.filter(o=>!o.paid).length}</button>
     <button type="button" data-filter="paid" aria-pressed="${f==="paid"}">Ödenen · ${occ.filter(o=>o.paid).length}</button>
   </div>`;
-  if(!shown.length){ h += `<div class="state"><h2>Gösterilecek ödeme yok</h2>Bu filtrede ${ML[m-1]} ayına ait kalem bulunmuyor.</div>`; return h; }
+  if(!shown.length){ h += `<div class="state"><h2>${S.q.trim() ? "Sonuç yok" : "Gösterilecek ödeme yok"}</h2>Bu filtrede ${ML[m-1]} ayına ait kalem bulunmuyor.</div>`; return h; }
   const groups = new Map();
   for(const o of shown){ if(!groups.has(o.date)) groups.set(o.date, []); groups.get(o.date).push(o); }
   for(const [date, list] of groups){
@@ -935,15 +940,14 @@ function viewAy(){
 }
 
 function viewKalemler(){
-  const q = S.q.trim().toLocaleLowerCase("tr");
   const cp = curPeriod();
-  let list = S.items.filter(i => inFilter(i) && (!q || (i.name+" "+(i.note||"")).toLocaleLowerCase("tr").includes(q)));
+  let list = S.items.filter(i => inFilter(i) && qMatch(i));
   list.sort((a,b) => (a.once?1:0)-(b.once?1:0) || (a.once||"").localeCompare(b.once||"") || (a.day||0)-(b.day||0) || a.name.localeCompare(b.name,"tr"));
   const occ = filtered(occurrences(cp));
   const fixedN = S.items.filter(inFilter).filter(i => !i.once && kindOf(i) === "fixed").length;
   const varN = S.items.filter(inFilter).filter(i => !i.once && kindOf(i) === "variable").length;
   const counts = {}; S.items.forEach(i => { counts[i.cat||""] = (counts[i.cat||""]||0) + 1; });
-  let h = `<label class="search" for="q">${ICON.search}<input id="q" type="search" placeholder="Kalem veya not ara" value="${esc(S.q)}" autocomplete="off"></label>
+  let h = `${searchHTML()}
   ${filterBarHTML()}
   <div class="stat-row">
     <div class="stat"><span>Sabit · değişken</span><b class="num">${fixedN} · ${varN} kalem</b></div>
