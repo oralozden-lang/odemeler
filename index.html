@@ -270,6 +270,13 @@ input.pin:focus{border-color:var(--accent);background:var(--surface)}
 .alert.soft b{color:var(--accent)}
 .banner.nag{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#FFF6E5;border-color:#F3D9A4;color:#7A4B07}
 .banner.nag b{flex:none;color:var(--accent);font-size:13.5px}
+.dayrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.two > .field{min-width:0}
+.field input,.field select,.field textarea{min-width:0}  /* month/date boxes ask Chrome for ~196px: never wider than their column */
+.dayrow button{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:0 10px;min-height:44px;font-size:13.5px;font-weight:700;color:var(--muted);white-space:nowrap}
+.dayrow button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);grid-column:1/-1}
+.dayrow input[hidden]{display:none}
 .agg-rel{flex:none;text-align:right;font-weight:800;font-size:14px;color:var(--accent);white-space:nowrap}
 .agg-rel.soon{color:var(--warn)}
 .agg-rel.today{color:var(--ok)}
@@ -350,7 +357,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 18;
+const APP_VERSION = 19;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -478,10 +485,12 @@ function relLabel(dateISO){
 function freqLabel(it){
   if(it.once) return "Tek sefer · " + fd(fmtLong, it.once);
   const ms = (it.months && it.months.length) ? it.months : ALL;
-  const d = `ayın ${it.day}'${daySuffix(it.day)}`;
+  // day 31 is "the last day of the month": 28/29 in February, 30 in April… (see occurrences)
+  const d = it.day === 31 ? "ayın son günü" : `ayın ${it.day}'${daySuffix(it.day)}`;
+  const g = it.day === 31 ? "son gün" : `${it.day}. gün`;
   if(ms.length === 12) return "Her " + d;
-  if(ms.length === 1) return `Her yıl ${ML[ms[0]-1]} · ${it.day}. gün`;
-  return ms.map(m => MS[m-1]).join(", ") + ` · ${it.day}. gün`;
+  if(ms.length === 1) return `Her yıl ${ML[ms[0]-1]} · ${g}`;
+  return ms.map(m => MS[m-1]).join(", ") + ` · ${g}`;
 }
 function daySuffix(n){
   const last = n % 10, tens = n % 100;
@@ -1835,7 +1844,7 @@ function openDetail(id, period, focusAmount, keepAmt){
     <h3>${esc(it.name)}</h3>
     <p class="lead"><span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))} · ${k === "fixed" ? "Sabit tutar" : "Her ay değişir"}</p>
     <dl class="kv">
-      <dt>Vade</dt><dd>${esc(fd(fmtHead, o.date))}${over ? `<small class="shifted">Kalemin günü ${it.day} · bu ay için değiştirildi <button class="copyamt" type="button" id="dueReset">Kalemin gününe dön</button></small>` : o.due !== o.date ? `<small class="shifted">${esc(fd(fmtHead, o.due))} hafta sonuna denk geldi</small>` : ""}</dd>
+      <dt>Vade</dt><dd>${esc(fd(fmtHead, o.date))}${over ? `<small class="shifted">Kalemin günü ${it.day === 31 ? "ayın son günü" : it.day} · bu ay için değiştirildi <button class="copyamt" type="button" id="dueReset">Kalemin gününe dön</button></small>` : o.due !== o.date ? `<small class="shifted">${esc(fd(fmtHead, o.due))} hafta sonuna denk geldi</small>` : ""}</dd>
       <dt>Durum</dt><dd style="color:${o.paid?"var(--ok)":(o.date<iso(todayDate())?"var(--late)":"inherit")}">${o.paid ? "Ödendi" : esc(relLabel(o.date))}</dd>
       <dt>Bu ayın tutarı</dt><dd class="num">${o.amt == null ? "Girilmedi" : tl(o.amt) + `<button class="copyamt" type="button" id="copyAmt" aria-label="Tutarı kopyala">Kopyala</button>`}</dd>
     </dl>
@@ -2020,7 +2029,7 @@ function openEditor(id){
       <div id="recur">
         <div class="field" id="mWrap"><label>Hangi aylarda?</label><div class="mchips" id="mchips">${MS.map((m,i)=>`<button type="button" data-m="${i+1}" aria-pressed="${months.includes(i+1)}">${m}</button>`).join("")}</div></div>
         <div class="two">
-          <div class="field"><label for="fDay">Ayın kaçında?</label><input id="fDay" type="number" inputmode="numeric" min="1" max="31" value="${esc(it&&!it.once?it.day:"")}" placeholder="1–31"></div>
+          <div class="field"><label for="fDay">Ayın kaçında?</label><div class="dayrow"><input id="fDay" type="number" inputmode="numeric" min="1" max="31" value="${esc(it&&!it.once&&it.day!==31?it.day:"")}" placeholder="1–31" ${it&&!it.once&&it.day===31?"hidden":""}><button type="button" id="fLast" aria-pressed="${!!(it&&!it.once&&it.day===31)}">Son gün</button></div></div>
           <div class="field" id="renewWrap"><label for="fRenew">Yenileme ayı</label><select id="fRenew"><option value="">Yok</option>${ML.map((n,i)=>`<option value="${i+1}" ${it&&it.renewMonth===i+1?"selected":""}>${n}</option>`).join("")}</select></div>
         </div>
         <div class="two">
@@ -2058,6 +2067,11 @@ function openEditor(id){
     modeSel.onchange = sync; kindSel.onchange = () => { kindTouched = true; sync(); }; amtIn.oninput = sync;
     sh.querySelector("#fCat").onchange = e => { if(!kindTouched){ const c = S.cats.find(x => x.id === e.target.value); if(c) kindSel.value = c.kind; sync(); } };
     sync();
+    // "Son gün" = day 31, which every month reads as its own last day
+    const dayIn = sh.querySelector("#fDay"), lastBtn = sh.querySelector("#fLast");
+    const setLast = on => { lastBtn.setAttribute("aria-pressed", on); dayIn.hidden = on; if(on) dayIn.value = ""; };
+    lastBtn.onclick = () => { const on = lastBtn.getAttribute("aria-pressed") !== "true"; setLast(on); if(!on) dayIn.focus(); };
+    dayIn.addEventListener("input", () => { if(dayIn.value === "31") setLast(true); });
     sh.querySelector("#mchips").onclick = e => {
       const b = e.target.closest("button[data-m]"); if(!b) return;
       const m = Number(b.dataset.m);
@@ -2112,7 +2126,7 @@ function openEditor(id){
         Object.assign(data, {once: d, day: Number(d.slice(8)), months: [], start: d.slice(0,7), kind: "fixed", amount, prices: amount != null ? [{from: d.slice(0,7), amount}] : []});
         delete data.end; delete data.renewMonth;
       } else {
-        const day = Number(sh.querySelector("#fDay").value);
+        const day = sh.querySelector("#fLast").getAttribute("aria-pressed") === "true" ? 31 : Number(sh.querySelector("#fDay").value);
         if(!Number.isInteger(day) || day < 1 || day > 31){ err.textContent = "Ayın gününü 1 ile 31 arasında yazın."; return; }
         if(mode === "months" && !months.length){ err.textContent = "En az bir ay seçin."; return; }
         // An item saved without a start month (old backups) keeps having none; inventing one would hide its past.
