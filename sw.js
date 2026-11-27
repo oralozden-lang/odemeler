@@ -1,6 +1,6 @@
 // Ödemeler service worker: keeps the app usable offline.
 // Bump VERSION whenever index.html, sw.js or the icons change: that is what tells an open app a new version is ready.
-const VERSION = "odemeler-v17";
+const VERSION = "odemeler-v18";
 // pdf.js (lib/) is only fetched when a PDF is first read. It lives in its own cache, named after its version,
 // so an app update does not throw it away and PDFs keep opening offline.
 const LIB = "odemeler-lib-pdfjs-3.11.174";

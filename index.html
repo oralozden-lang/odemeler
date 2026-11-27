@@ -350,7 +350,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 17;
+const APP_VERSION = 18;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -564,6 +564,8 @@ function filterBarHTML(){
 /* ---------- occurrences ---------- */
 // A recurring payment that falls on a Saturday or Sunday is due the following Monday. Only that month moves:
 // next month it is back on its own day. (It stays part of its own month even if Monday is in the next one.)
+// A due date set for one month (months[p].due, e.g. this month's card statement says 27th, not 30th) is used
+// as it is, without the weekend move; the item's own day is untouched, so the next month is back to normal.
 function nextWeekday(dateISO){
   const d = parseISO(dateISO), w = d.getDay();
   return w === 6 ? iso(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 2))
@@ -573,6 +575,7 @@ function occurrences(period){
   const [y,m] = period.split("-").map(Number);
   const last = new Date(y, m, 0).getDate();
   const paidMap = (S.months[period] && S.months[period].paid) || {};
+  const dueMap = (S.months[period] && S.months[period].due) || {};
   const out = [];
   for(const it of S.items){
     let date, due;
@@ -585,7 +588,7 @@ function occurrences(period){
       const ms = (it.months && it.months.length) ? it.months : ALL;
       if(!ms.includes(m)) continue;
       due = `${period}-${pad(Math.min(Math.max(1, it.day||1), last))}`;
-      date = nextWeekday(due);
+      date = dueMap[it.id] || nextWeekday(due);
     }
     const paid = paidMap[it.id] || null;
     const a = amountFor(it, period, paid);
@@ -655,10 +658,11 @@ function cleanCats(list){
   return cats.length ? cats : DEFAULT_CATS.map(c => ({...c}));
 }
 function cleanMonth(v){
-  const paid = {}, amounts = {};
+  const paid = {}, amounts = {}, due = {};
   if(isObj(v) && isObj(v.paid)) for(const [id, p] of Object.entries(v.paid)) if(isObj(p)) paid[id] = {...p, at: String(p.at ?? ""), amount: numOrNull(p.amount)};
   if(isObj(v) && isObj(v.amounts)) for(const [id, a] of Object.entries(v.amounts)){ const n = numOrNull(a); if(n != null) amounts[id] = n; }
-  return {paid, amounts};
+  if(isObj(v) && isObj(v.due)) for(const [id, d] of Object.entries(v.due)) if(isDate(d)) due[id] = d;
+  return {paid, amounts, due};
 }
 const cleanInfos = list => (Array.isArray(list) ? list : []).filter(c => isObj(c) && c.id && c.title).map(c => ({
   ...c, id: String(c.id), title: String(c.title), note: String(c.note ?? ""), group: c.group === "genel" ? "genel" : "sube",
@@ -734,7 +738,7 @@ function persist(){
 }
 function dbErr(){ return "Kaydedilemedi. Telefonda yer açıp tekrar deneyin."; }
 function newId(){ return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-function monthRec(period){ const m = S.months[period] || {}; return {paid: {...(m.paid||{})}, amounts: {...(m.amounts||{})}}; }
+function monthRec(period){ const m = S.months[period] || {}; return {paid: {...(m.paid||{})}, amounts: {...(m.amounts||{})}, due: {...(m.due||{})}}; }
 async function setPaid(period, id, rec){
   const m = monthRec(period);
   if(rec) m.paid[id] = rec; else delete m.paid[id];
@@ -744,6 +748,12 @@ async function setPaid(period, id, rec){
 function setAmounts(period, map){  // map: id -> number | null
   const m = monthRec(period);
   for(const [id, v] of Object.entries(map)){ if(v == null) delete m.amounts[id]; else m.amounts[id] = v; }
+  S.months = {...S.months, [period]: m};
+  return persist();
+}
+function setDue(period, id, date){  // date: YYYY-MM-DD, or null for the item's own day
+  const m = monthRec(period);
+  if(date) m.due[id] = date; else delete m.due[id];
   S.months = {...S.months, [period]: m};
   return persist();
 }
@@ -1815,8 +1825,9 @@ window.addEventListener("popstate", () => {
 });
 document.addEventListener("keydown", e => { if(e.key === "Escape") closeSheet(); });
 
-function openDetail(id, period, focusAmount){
+function openDetail(id, period, focusAmount, keepAmt){
   const o = findOcc(id, period); if(!o) return;
+  const over = !o.it.once && !!((S.months[period] || {}).due || {})[id];
   const it = o.it, c = catOf(it), k = kindOf(it);
   const entered = enteredAmount(it, period);
   const prevAmt = lastKnown(it, period);
@@ -1824,7 +1835,7 @@ function openDetail(id, period, focusAmount){
     <h3>${esc(it.name)}</h3>
     <p class="lead"><span class="tag" style="--h:${Number(c.h)||0}">${esc(c.label)}</span> &nbsp;${esc(freqLabel(it))} · ${k === "fixed" ? "Sabit tutar" : "Her ay değişir"}</p>
     <dl class="kv">
-      <dt>Vade</dt><dd>${esc(fd(fmtHead, o.date))}${o.due !== o.date ? `<small class="shifted">${esc(fd(fmtHead, o.due))} hafta sonuna denk geldi</small>` : ""}</dd>
+      <dt>Vade</dt><dd>${esc(fd(fmtHead, o.date))}${over ? `<small class="shifted">Kalemin günü ${it.day} · bu ay için değiştirildi <button class="copyamt" type="button" id="dueReset">Kalemin gününe dön</button></small>` : o.due !== o.date ? `<small class="shifted">${esc(fd(fmtHead, o.due))} hafta sonuna denk geldi</small>` : ""}</dd>
       <dt>Durum</dt><dd style="color:${o.paid?"var(--ok)":(o.date<iso(todayDate())?"var(--late)":"inherit")}">${o.paid ? "Ödendi" : esc(relLabel(o.date))}</dd>
       <dt>Bu ayın tutarı</dt><dd class="num">${o.amt == null ? "Girilmedi" : tl(o.amt) + `<button class="copyamt" type="button" id="copyAmt" aria-label="Tutarı kopyala">Kopyala</button>`}</dd>
     </dl>
@@ -1841,8 +1852,8 @@ function openDetail(id, period, focusAmount){
         <button class="btn ghost" type="button" id="edit">Kalemi düzenle</button>
       </div>` : `
       <div class="two">
-        <div class="field"><label for="pAmt">${k === "variable" ? "Bu ayın tutarı (₺)" : "Ödenen tutar (₺)"}</label><input id="pAmt" data-money inputmode="decimal" placeholder="${k === "variable" && prevAmt != null ? "Geçen ay " + esc(tl(prevAmt)) : "Örn. 92.500,00"}" value="${esc(amountInput(k === "variable" ? entered : o.amt))}" ${focusAmount?"autofocus":""}></div>
-        <div class="field"><label for="pAt">Ödeme tarihi</label><input id="pAt" type="date" value="${iso(todayDate())}"></div>
+        <div class="field"><label for="pAmt">${k === "variable" ? "Bu ayın tutarı (₺)" : "Ödenen tutar (₺)"}</label><input id="pAmt" data-money inputmode="decimal" placeholder="${k === "variable" && prevAmt != null ? "Geçen ay " + esc(tl(prevAmt)) : "Örn. 92.500,00"}" value="${esc(keepAmt != null ? keepAmt : amountInput(k === "variable" ? entered : o.amt))}" ${focusAmount?"autofocus":""}></div>
+        ${it.once ? "" : `<div class="field"><label for="pDue">Bu ayın vadesi</label><input id="pDue" type="date" value="${o.date}" min="${period}-01" max="${addMonths(period, 1)}-${pad(new Date(Number(period.slice(0,4)), Number(period.slice(5)) + 1, 0).getDate())}"></div>`}
       </div>
       <p class="err" id="pErr"></p>
       <div class="btns">
@@ -1876,11 +1887,29 @@ function openDetail(id, period, focusAmount){
       const typed = v != null;
       if(!typed) v = o.amt;  // left empty: the item's own amount for the month
       if(v == null){ sh.querySelector("#pErr").textContent = "Ödenen tutarı yazın."; sh.querySelector("#pAmt").focus(); return; }
-      const at = sh.querySelector("#pAt").value || iso(todayDate());
+      const at = iso(todayDate());
       if(k === "variable" && typed) setAmounts(period, {[id]: v});
       closeSheet();
       setPaid(period, id, {at, amount: v ?? null});
       toast(`${it.name} ödendi`, "Geri al", () => setPaid(period, id, null));
+    };
+    // This month's due date: saved as soon as it is picked, for this month only.
+    const reopen = () => {  // redrawn in place: no slide-in again
+      const a = sh.querySelector("#pAmt"); openDetail(id, period, false, a ? a.value : null);
+      const ov = $(".overlay"); if(ov){ ov.style.animation = "none"; ov.querySelector(".sheet").style.animation = "none"; }
+    };
+    const pDue = sh.querySelector("#pDue");
+    if(pDue) pDue.onchange = () => {
+      const v = pDue.value;
+      if(!isDate(v) || v < pDue.min || v > pDue.max){ pDue.value = o.date; sh.querySelector("#pErr").textContent = "Bu ayın vadesi, ayın başından bir sonraki ayın sonuna kadar olabilir."; return; }
+      if(v === o.date) return;
+      if(!setDue(period, id, v === nextWeekday(o.due) ? null : v)){ pDue.value = o.date; return; }
+      render(); reopen(); toast(`Bu ay vade: ${fd(fmtHead, v)}`);
+    };
+    const dr = sh.querySelector("#dueReset");
+    if(dr) dr.onclick = () => {
+      if(!setDue(period, id, null)) return;
+      render(); reopen(); toast(`Vade kalemin gününe döndü: ${fd(fmtHead, nextWeekday(o.due))}`);
     };
     const sa = sh.querySelector("#saveAmt");
     if(sa) sa.onclick = () => {
