@@ -372,7 +372,7 @@ const DEFAULT_CATS = [
   {id:"diger",    label:"Diğer",         h:210, kind:"variable"}
 ];
 // Shown at the bottom of the ⋯ menu. Keep equal to the number in sw.js VERSION.
-const APP_VERSION = 20;
+const APP_VERSION = 21;
 const KIND_LABEL = {fixed:"Sabit tutar", variable:"Her ay değişir"};
 const MS = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 const ML = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
@@ -1734,9 +1734,9 @@ function pickRow(row){
   if(!SEL.keys.size) endSel(); else render();
 }
 function endSel(){
-  const had = SEL.keys.size; SEL.keys.clear();
+  SEL.keys.clear();
   if(SEL.entry){ SEL.entry = false; history.back(); }
-  if(had) render();
+  render();  // always: the last row may have been dropped just before, with the bar still on screen
 }
 let lp = null, lpFired = false;
 document.addEventListener("pointerdown", e => {
@@ -1745,7 +1745,7 @@ document.addEventListener("pointerdown", e => {
   if(!row || $(".overlay") || e.button > 0) return;
   lp = {x: e.clientX, y: e.clientY, t: setTimeout(() => {
     lp = null; lpFired = true;
-    if(!SEL.keys.has(row.dataset.period + "|" + row.dataset.id)) pickRow(row);
+    pickRow(row);  // a long press picks a row, or drops one already picked
     try { navigator.vibrate && navigator.vibrate(15); } catch(err){}
   }, 480)};
 }, {passive: true});
